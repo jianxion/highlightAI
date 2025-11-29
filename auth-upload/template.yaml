@@ -1,0 +1,338 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: HighlightAI - Authentication and Video Upload Module
+
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 30
+    MemorySize: 256
+
+Resources:
+  # S3 BUCKET FOR RAW VIDEO UPLOADS
+  RawVideosBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub highlightai-raw-videos-${AWS::AccountId}
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedMethods:
+              - PUT
+              - POST
+              - GET
+            AllowedHeaders:
+              - '*'
+            MaxAge: 3000
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !GetAtt UploadQueue.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: videos/
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldRawVideos
+            Status: Enabled
+            ExpirationInDays: 7
+
+  # SQS QUEUE FOR UPLOAD NOTIFICATIONS
+  UploadQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: highlightai-upload-queue
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 86400
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt UploadDLQ.Arn
+        maxReceiveCount: 3
+
+  UploadDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: highlightai-upload-dlq
+      MessageRetentionPeriod: 1209600  # 14 days
+
+  UploadQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref UploadQueue
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action:
+              - SQS:SendMessage
+            Resource: !GetAtt UploadQueue.Arn
+            Condition:
+              StringLike:
+                aws:SourceArn: !Sub arn:aws:s3:::highlightai-raw-videos-${AWS::AccountId}
+
+
+  # DYNAMODB TABLE FOR VIDEO METADATA
+  VideosTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: highlightai-videos
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: videoId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: N
+      KeySchema:
+        - AttributeName: videoId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserVideosIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+
+  # COGNITO USER POOL
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: highlightai-users
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      EmailConfiguration:
+        EmailSendingAccount: COGNITO_DEFAULT
+      Schema:
+        - Name: email
+          Required: true
+          Mutable: false
+        - Name: name
+          Required: false
+          Mutable: true
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: highlightai-client
+      UserPoolId: !Ref UserPool
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      GenerateSecret: false
+      TokenValidityUnits:
+        AccessToken: hours
+        IdToken: hours
+        RefreshToken: days
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      RefreshTokenValidity: 30
+
+
+  # API GATEWAY
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: highlightai-api
+      StageName: dev
+      Cors:
+        AllowOrigin: "'*'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowCredentials: false
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !GetAtt UserPool.Arn
+            Identity:
+              Header: Authorization
+      GatewayResponses:
+        DEFAULT_4XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        DEFAULT_5XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+
+
+  # LAMBDA: SIGNUP
+  SignupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: highlightai-signup
+      CodeUri: lambdas/auth/
+      Handler: signup.lambda_handler
+      Environment:
+        Variables:
+          CLIENT_ID: !Ref UserPoolClient
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:SignUp
+              Resource: !GetAtt UserPool.Arn
+      Events:
+        SignupApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /auth/signup
+            Method: POST
+            Auth:
+              Authorizer: NONE
+
+  # LAMBDA: SIGNIN
+  SigninFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: highlightai-signin
+      CodeUri: lambdas/auth/
+      Handler: signin.lambda_handler
+      Environment:
+        Variables:
+          CLIENT_ID: !Ref UserPoolClient
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:InitiateAuth
+              Resource: !GetAtt UserPool.Arn
+      Events:
+        SigninApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /auth/signin
+            Method: POST
+            Auth:
+              Authorizer: NONE
+
+  # LAMBDA: PRESIGNED URL GENERATOR
+  PresignedUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: highlightai-presigned-url
+      CodeUri: lambdas/presigned-url/
+      Handler: handler.lambda_handler
+      Environment:
+        Variables:
+          RAW_VIDEOS_BUCKET: !Ref RawVideosBucket
+          VIDEOS_TABLE: !Ref VideosTable
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:PutObjectAcl
+              Resource: !Sub ${RawVideosBucket.Arn}/videos/*
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource: !GetAtt VideosTable.Arn
+      Events:
+        GetPresignedUrlApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /upload/presigned-url
+            Method: POST
+
+  # LAMBDA: UPLOAD COMPLETE HANDLER
+  UploadCompleteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: highlightai-upload-complete
+      CodeUri: lambdas/upload-complete/
+      Handler: handler.lambda_handler
+      Environment:
+        Variables:
+          VIDEOS_TABLE: !Ref VideosTable
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:UpdateItem
+                - dynamodb:GetItem
+              Resource: !GetAtt VideosTable.Arn
+            - Effect: Allow
+              Action:
+                - sqs:ReceiveMessage
+                - sqs:DeleteMessage
+                - sqs:GetQueueAttributes
+              Resource: !GetAtt UploadQueue.Arn
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt UploadQueue.Arn
+            BatchSize: 10
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/dev
+    Export:
+      Name: !Sub ${AWS::StackName}-ApiUrl
+
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref UserPool
+    Export:
+      Name: !Sub ${AWS::StackName}-UserPoolId
+
+  UserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref UserPoolClient
+    Export:
+      Name: !Sub ${AWS::StackName}-UserPoolClientId
+
+  RawVideosBucketName:
+    Description: S3 Bucket for raw video uploads
+    Value: !Ref RawVideosBucket
+    Export:
+      Name: !Sub ${AWS::StackName}-RawVideosBucket
+
+  VideosTableName:
+    Description: DynamoDB Table for video metadata
+    Value: !Ref VideosTable
+    Export:
+      Name: !Sub ${AWS::StackName}-VideosTable
+
+  UploadQueueUrl:
+    Description: SQS Queue URL for upload notifications
+    Value: !Ref UploadQueue
+    Export:
+      Name: !Sub ${AWS::StackName}-UploadQueueUrl
