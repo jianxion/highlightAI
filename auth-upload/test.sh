@@ -24,9 +24,9 @@ echo "============================"
 echo ""
 
 # Test data
-TEST_EMAIL="frankshenjx@gmail.com" ## replace with your email to receive verification code
+TEST_EMAIL="monishsreekanth07@gmail.com" ## replace with your email to receive verification code
 TEST_PASSWORD="TestPass123!" # Replace with your desired test password
-TEST_NAME="Test User"
+TEST_NAME="monish"
 
 echo -e "${BLUE}Test User:${NC}"
 echo "  Email: ${TEST_EMAIL}"
