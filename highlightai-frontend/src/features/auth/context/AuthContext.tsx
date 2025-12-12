@@ -4,6 +4,7 @@ import {
   useState,
   type ReactNode,
   useMemo,
+  useEffect,
 } from "react";
 
 interface AuthUser {
@@ -39,21 +40,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user: null,
   });
 
+  // 🔥 LOAD AUTH STATE ON PAGE LOAD
+  useEffect(() => {
+    const saved = localStorage.getItem("highlightai_auth");
+    if (saved) {
+      setState(JSON.parse(saved));
+    }
+  }, []);
+
+  // 🔥 SAVE AUTH STATE TO LOCALSTORAGE
   const login: AuthContextValue["login"] = ({
     email,
     accessToken,
     refreshToken,
     idToken,
   }) => {
-    setState({
+    const newState: AuthState = {
       accessToken,
       refreshToken,
       idToken,
       user: { email },
-    });
+    };
+
+    localStorage.setItem("highlightai_auth", JSON.stringify(newState));
+    setState(newState);
   };
 
   const logout = () => {
+    localStorage.removeItem("highlightai_auth");
     setState({
       accessToken: null,
       refreshToken: null,
@@ -77,8 +91,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuthContext() {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error("useAuthContext must be used inside AuthProvider");
-  }
+  if (!ctx) throw new Error("useAuthContext must be used inside AuthProvider");
   return ctx;
 }

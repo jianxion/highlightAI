@@ -22,5 +22,12 @@ export interface SignInResponse {
 export const signUpApi = (data: SignUpPayload) =>
   apiClient.post("/auth/signup", data);
 
+export async function confirmSignupApi(data: { email: string; code: string }) {
+  const res = await apiClient.post("/auth/confirm", data);
+  return res.data;
+}
+
 export const signInApi = (data: SignInPayload) =>
   apiClient.post<SignInResponse>("/auth/signin", data);
+
+
