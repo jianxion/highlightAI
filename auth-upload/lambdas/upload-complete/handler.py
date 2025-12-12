@@ -48,6 +48,8 @@ def lambda_handler(event, context):
                         },
                         ReturnValues='ALL_NEW'
                     )
+
+                    ## TODO : Trigger SQS
                     
                     print(f"Successfully updated video {video_id} to UPLOADED status")
                     print(f"S3 Key: {s3_key}, Size: {file_size} bytes")
