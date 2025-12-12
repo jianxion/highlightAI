@@ -16,14 +16,9 @@ Resources:
       BucketName: !Sub highlightai-raw-videos-${AWS::AccountId}
       CorsConfiguration:
         CorsRules:
-          - AllowedOrigins:
-              - '*'
-            AllowedMethods:
-              - PUT
-              - POST
-              - GET
-            AllowedHeaders:
-              - '*'
+          - AllowedOrigins: ['*']
+            AllowedMethods: ['PUT', 'POST', 'GET']
+            AllowedHeaders: ['*']
             MaxAge: 3000
       NotificationConfiguration:
         QueueConfigurations:
@@ -60,27 +55,24 @@ Resources:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: highlightai-upload-dlq
-      MessageRetentionPeriod: 1209600  # 14 days
+      MessageRetentionPeriod: 1209600
 
   UploadQueuePolicy:
     Type: AWS::SQS::QueuePolicy
     Properties:
-      Queues:
-        - !Ref UploadQueue
+      Queues: [!Ref UploadQueue]
       PolicyDocument:
         Statement:
           - Effect: Allow
             Principal:
               Service: s3.amazonaws.com
-            Action:
-              - SQS:SendMessage
+            Action: SQS:SendMessage
             Resource: !GetAtt UploadQueue.Arn
             Condition:
               StringLike:
                 aws:SourceArn: !Sub arn:aws:s3:::highlightai-raw-videos-${AWS::AccountId}
 
-
-  # DYNAMODB TABLE FOR VIDEO METADATA
+  # DYNAMODB TABLE
   VideosTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -108,16 +100,13 @@ Resources:
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES
 
-
   # COGNITO USER POOL
   UserPool:
     Type: AWS::Cognito::UserPool
     Properties:
       UserPoolName: highlightai-users
-      UsernameAttributes:
-        - email
-      AutoVerifiedAttributes:
-        - email
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
       EmailConfiguration:
         EmailSendingAccount: COGNITO_DEFAULT
       Schema:
@@ -152,41 +141,39 @@ Resources:
       IdTokenValidity: 1
       RefreshTokenValidity: 30
 
-
   # API GATEWAY
-ApiGateway:
-  Type: AWS::Serverless::Api
-  Properties:
-    Name: highlightai-api
-    StageName: dev
-    Cors:
-      AllowOrigin: "'*'"
-      AllowHeaders: "'*'"
-      AllowMethods: "'OPTIONS,GET,POST,PUT,DELETE'"
-    Auth:
-      DefaultAuthorizer: CognitoAuthorizer
-      AddDefaultAuthorizerToCorsPreflight: false   # <--- REQUIRED FIX
-      Authorizers:
-        CognitoAuthorizer:
-          UserPoolArn: !GetAtt UserPool.Arn
-          Identity:
-            Header: Authorization
-    GatewayResponses:
-      DEFAULT_4XX:
-        ResponseParameters:
-          Headers:
-            Access-Control-Allow-Origin: "'*'"
-            Access-Control-Allow-Headers: "'*'"
-            Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,DELETE'"
-      DEFAULT_5XX:
-        ResponseParameters:
-          Headers:
-            Access-Control-Allow-Origin: "'*'"
-            Access-Control-Allow-Headers: "'*'"
-            Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,DELETE'"
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: highlightai-api
+      StageName: dev
+      Cors:
+        AllowOrigin: "'*'"
+        AllowHeaders: "'*'"
+        AllowMethods: "'OPTIONS,GET,POST,PUT,DELETE'"
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        AddDefaultAuthorizerToCorsPreflight: false   # REQUIRED FIX
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !GetAtt UserPool.Arn
+            Identity:
+              Header: Authorization
+      GatewayResponses:
+        DEFAULT_4XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'*'"
+              Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,DELETE'"
+        DEFAULT_5XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'*'"
+              Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,DELETE'"
 
-
-  # LAMBDA: SIGNUP
+  # SIGNUP
   SignupFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -200,8 +187,7 @@ ApiGateway:
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
-              Action:
-                - cognito-idp:SignUp
+              Action: cognito-idp:SignUp
               Resource: !GetAtt UserPool.Arn
       Events:
         SignupApi:
@@ -213,7 +199,7 @@ ApiGateway:
             Auth:
               Authorizer: NONE
 
-  # LAMBDA: SIGNIN
+  # SIGNIN
   SigninFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -227,8 +213,7 @@ ApiGateway:
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
-              Action:
-                - cognito-idp:InitiateAuth
+              Action: cognito-idp:InitiateAuth
               Resource: !GetAtt UserPool.Arn
       Events:
         SigninApi:
@@ -239,7 +224,8 @@ ApiGateway:
             Method: POST
             Auth:
               Authorizer: NONE
-    # LAMBDA: CONFIRM SIGNUP (OTP)
+
+  # 🆕 CONFIRM SIGNUP (OTP)
   ConfirmSignupFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -253,8 +239,7 @@ ApiGateway:
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
-              Action:
-                - cognito-idp:ConfirmSignUp
+              Action: cognito-idp:ConfirmSignUp
               Resource: !GetAtt UserPool.Arn
       Events:
         ConfirmSignupApi:
@@ -266,8 +251,7 @@ ApiGateway:
             Auth:
               Authorizer: NONE
 
-
-  # LAMBDA: PRESIGNED URL GENERATOR
+  # PRESIGNED URL
   PresignedUrlFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -282,13 +266,10 @@ ApiGateway:
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
-              Action:
-                - s3:PutObject
-                - s3:PutObjectAcl
+              Action: [s3:PutObject, s3:PutObjectAcl]
               Resource: !Sub ${RawVideosBucket.Arn}/videos/*
             - Effect: Allow
-              Action:
-                - dynamodb:PutItem
+              Action: dynamodb:PutItem
               Resource: !GetAtt VideosTable.Arn
       Events:
         GetPresignedUrlApi:
@@ -298,7 +279,7 @@ ApiGateway:
             Path: /upload/presigned-url
             Method: POST
 
-  # LAMBDA: UPLOAD COMPLETE HANDLER
+  # UPLOAD COMPLETE HANDLER
   UploadCompleteFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -312,15 +293,10 @@ ApiGateway:
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
-              Action:
-                - dynamodb:UpdateItem
-                - dynamodb:GetItem
+              Action: [dynamodb:UpdateItem, dynamodb:GetItem]
               Resource: !GetAtt VideosTable.Arn
             - Effect: Allow
-              Action:
-                - sqs:ReceiveMessage
-                - sqs:DeleteMessage
-                - sqs:GetQueueAttributes
+              Action: [sqs:ReceiveMessage, sqs:DeleteMessage, sqs:GetQueueAttributes]
               Resource: !GetAtt UploadQueue.Arn
       Events:
         SQSEvent:
@@ -355,15 +331,13 @@ Outputs:
       Name: !Sub ${AWS::StackName}-RawVideosBucket
 
   VideosTableName:
-    Description: DynamoDB Table for video metadata
+    Description: DynamoDB Table Name
     Value: !Ref VideosTable
     Export:
       Name: !Sub ${AWS::StackName}-VideosTable
 
   UploadQueueUrl:
-    Description: SQS Queue URL for upload notifications
+    Description: SQS Queue URL
     Value: !Ref UploadQueue
     Export:
       Name: !Sub ${AWS::StackName}-UploadQueueUrl
-
-
