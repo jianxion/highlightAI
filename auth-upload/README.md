@@ -187,10 +187,11 @@ aws s3 ls s3://highlightai-raw-videos-dev-<your-account-id>/videos/
 
 1. **User signs up** → Cognito creates account
 2. **User signs in** → Receives JWT tokens
-3. **Request presigned URL** → Lambda validates JWT, creates DynamoDB entry
+3. **Request presigned URL** → Lambda validates JWT, creates DynamoDB entry (status: UPLOADING)
 4. **Upload to S3** → Client uploads directly to S3 (no backend bottleneck)
-5. **S3 triggers event** → SQS receives notification
+5. **S3 triggers event** → SQS UploadQueue receives notification
 6. **Lambda processes** → Updates DynamoDB status to 'UPLOADED'
+7. **Lambda sends message** → VideoProcessingQueue for editing pipeline to consume
 
 ## DynamoDB Schema
 
@@ -217,6 +218,48 @@ API_URL=https://xxx.execute-api.us-east-1.amazonaws.com/dev
 USER_POOL_ID=us-east-1_xxxxx
 CLIENT_ID=xxxxxxxxxxxxx
 RAW_VIDEOS_BUCKET=highlightai-raw-videos-123456789
+```
+
+## Integration with Video Editing
+
+### SQS Queue for Processing
+
+After a video is uploaded, a message is automatically sent to `VideoProcessingQueue` with this structure:
+
+```json
+{
+  "videoId": "550e8400-e29b-41d4-a716-446655440000",
+  "bucket": "highlightai-raw-videos-298156079577",
+  "s3Key": "videos/userId_videoId_timestamp_filename.mp4",
+  "fileSize": 10240,
+  "status": "UPLOADED",
+  "timestamp": 1764372608,
+  "message": "Video ready for processing"
+}
+```
+
+**Editing team can consume messages:**
+
+```bash
+# Get queue URL from CloudFormation
+aws cloudformation describe-stacks \
+  --stack-name highlightai-auth-upload \
+  --query "Stacks[0].Outputs[?OutputKey=='VideoProcessingQueueUrl'].OutputValue" \
+  --output text
+
+# Poll for messages
+aws sqs receive-message \
+  --queue-url <queue-url> \
+  --max-number-of-messages 10 \
+  --wait-time-seconds 20
+
+# Or use in Lambda/Python:
+import boto3
+sqs = boto3.client('sqs')
+messages = sqs.receive_message(
+    QueueUrl='<queue-url>',
+    MaxNumberOfMessages=10
+)
 ```
 
 

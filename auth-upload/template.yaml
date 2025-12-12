@@ -62,6 +62,23 @@ Resources:
       QueueName: highlightai-upload-dlq
       MessageRetentionPeriod: 1209600  # 14 days
 
+  # SQS QUEUE FOR VIDEO EDITING/PROCESSING TEAM
+  VideoProcessingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: highlightai-video-processing-queue
+      VisibilityTimeout: 900  # 15 minutes for video processing
+      MessageRetentionPeriod: 345600  # 4 days
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VideoProcessingDLQ.Arn
+        maxReceiveCount: 3
+
+  VideoProcessingDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: highlightai-video-processing-dlq
+      MessageRetentionPeriod: 1209600  # 14 days
+
   UploadQueuePolicy:
     Type: AWS::SQS::QueuePolicy
     Properties:
@@ -279,6 +296,7 @@ Resources:
       Environment:
         Variables:
           VIDEOS_TABLE: !Ref VideosTable
+          VIDEO_PROCESSING_QUEUE_URL: !Ref VideoProcessingQueue
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -293,6 +311,10 @@ Resources:
                 - sqs:DeleteMessage
                 - sqs:GetQueueAttributes
               Resource: !GetAtt UploadQueue.Arn
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+              Resource: !GetAtt VideoProcessingQueue.Arn
       Events:
         SQSEvent:
           Type: SQS
@@ -336,3 +358,15 @@ Outputs:
     Value: !Ref UploadQueue
     Export:
       Name: !Sub ${AWS::StackName}-UploadQueueUrl
+
+  VideoProcessingQueueUrl:
+    Description: SQS Queue URL for video processing/editing team
+    Value: !Ref VideoProcessingQueue
+    Export:
+      Name: !Sub ${AWS::StackName}-VideoProcessingQueueUrl
+
+  VideoProcessingQueueArn:
+    Description: SQS Queue ARN for video processing/editing team
+    Value: !GetAtt VideoProcessingQueue.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-VideoProcessingQueueArn
