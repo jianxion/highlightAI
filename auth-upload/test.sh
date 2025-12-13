@@ -154,7 +154,7 @@ echo -e "${YELLOW}5️⃣  Testing Video Upload to S3...${NC}"
 
 # Create a small test video file (1KB with random data)
 TEST_VIDEO_FILE="test-videos/vid1.mp4"
-dd if=/dev/urandom of="${TEST_VIDEO_FILE}" bs=1024 count=10 2>/dev/null
+# dd if=/dev/urandom of="${TEST_VIDEO_FILE}" bs=1024 count=10 2>/dev/null
 
 echo -e "${BLUE}Created test video file: ${TEST_VIDEO_FILE} (10KB)${NC}"
 echo -e "${BLUE}Uploading to S3...${NC}"
@@ -194,7 +194,7 @@ echo -e "${YELLOW}5️⃣  Testing Video Upload to S3...${NC}"
 # ⭐ ADD THIS - Wait for Lambda to process
 echo ""
 echo -e "${BLUE}Waiting for Lambda to process video (100 seconds)...${NC}"
-for i in {100..1}; do
+for i in {30..1}; do
     echo -ne "\r${BLUE}$i seconds remaining...${NC}"
     sleep 1
 done
