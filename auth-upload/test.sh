@@ -24,9 +24,9 @@ echo "============================"
 echo ""
 
 # Test data
-TEST_EMAIL="monishsreekanth07@gmail.com" ## replace with your email to receive verification code
-TEST_PASSWORD="TestPass123!" # Replace with your desired test password
-TEST_NAME="monish"
+TEST_EMAIL="dd3873@nyu.edu" ## replace with your email to receive verification code
+TEST_PASSWORD="TestPass@123" # Replace with your desired test password
+TEST_NAME="Deb"
 
 echo -e "${BLUE}Test User:${NC}"
 echo "  Email: ${TEST_EMAIL}"
@@ -153,7 +153,7 @@ sleep 1
 echo -e "${YELLOW}5️⃣  Testing Video Upload to S3...${NC}"
 
 # Create a small test video file (1KB with random data)
-TEST_VIDEO_FILE="/tmp/test-video-${VIDEO_ID}.mp4"
+TEST_VIDEO_FILE="test-videos/vid1.mp4"
 dd if=/dev/urandom of="${TEST_VIDEO_FILE}" bs=1024 count=10 2>/dev/null
 
 echo -e "${BLUE}Created test video file: ${TEST_VIDEO_FILE} (10KB)${NC}"
@@ -173,7 +173,8 @@ if [ "${UPLOAD_HTTP_CODE}" = "200" ]; then
     
     # Wait for SQS processing
     echo -e "${BLUE}Waiting 5 seconds for SQS processing...${NC}"
-    sleep 5
+    echo -e "${BLUE}Waiting 60 seconds for Lambda to process (large videos take time)...${NC}"
+    sleep 60
     
     # Check DynamoDB for video status
     echo -e "${BLUE}Checking video status in DynamoDB...${NC}"
@@ -186,16 +187,85 @@ else
     echo -e "${RED}❌ Video upload failed${NC}"
     echo "${UPLOAD_RESPONSE}" | sed '/HTTP_CODE:/d'
 fi
+echo ""
+echo -e "${YELLOW}5️⃣  Testing Video Upload to S3...${NC}"
+# ... upload code ...
+
+# ⭐ ADD THIS - Wait for Lambda to process
+echo ""
+echo -e "${BLUE}Waiting for Lambda to process video (100 seconds)...${NC}"
+for i in {100..1}; do
+    echo -ne "\r${BLUE}$i seconds remaining...${NC}"
+    sleep 1
+done
+echo ""
+
+# 6. Check Edited Videos in S3
+echo ""
+echo -e "${YELLOW}6️⃣  Checking Edited Videos in S3...${NC}"
+
+EDITED_BUCKET=$(echo "${RAW_VIDEOS_BUCKET}" | sed 's/raw/edited/')
+echo -e "${BLUE}Edited bucket: ${EDITED_BUCKET}${NC}"
+
+echo -e "${BLUE}Looking for edited videos for VIDEO_ID: ${VIDEO_ID}${NC}"
+
+# List videos with this VIDEO_ID
+EDITED_VIDEOS=$(aws s3 ls "s3://${EDITED_BUCKET}/edited/" --recursive | grep "${VIDEO_ID}" || true)
+
+if [ -z "$EDITED_VIDEOS" ]; then
+    echo -e "${RED}❌ No edited videos found yet${NC}"
+    echo -e "${BLUE}This might mean:${NC}"
+    echo "  1. Lambda is still processing..."
+    echo "  2. Lambda encountered an error"
+    echo ""
+    echo -e "${BLUE}Check Lambda logs:${NC}"
+    echo "  aws logs tail /aws/lambda/highlightai-video-editor --follow"
+else
+    echo -e "${GREEN}✅ Edited videos found!${NC}"
+    echo "${EDITED_VIDEOS}"
+    
+    # Download and verify plain version
+    PLAIN_KEY="edited/${VIDEO_ID}_plain.mp4"
+    CAPTIONED_KEY="edited/${VIDEO_ID}_captioned.mp4"
+    
+    echo ""
+    echo -e "${BLUE}Downloading plain video for verification...${NC}"
+    if aws s3 cp "s3://${EDITED_BUCKET}/${PLAIN_KEY}" "/tmp/${VIDEO_ID}_plain.mp4" 2>/dev/null; then
+        PLAIN_SIZE=$(ls -lh "/tmp/${VIDEO_ID}_plain.mp4" | awk '{print $5}')
+        echo -e "${GREEN}✅ Plain video downloaded (${PLAIN_SIZE})${NC}"
+    else
+        echo -e "${RED}❌ Failed to download plain video${NC}"
+    fi
+    
+    echo ""
+    echo -e "${BLUE}Downloading captioned video for verification...${NC}"
+    if aws s3 cp "s3://${EDITED_BUCKET}/${CAPTIONED_KEY}" "/tmp/${VIDEO_ID}_captioned.mp4" 2>/dev/null; then
+        CAPTIONED_SIZE=$(ls -lh "/tmp/${VIDEO_ID}_captioned.mp4" | awk '{print $5}')
+        echo -e "${GREEN}✅ Captioned video downloaded (${CAPTIONED_SIZE})${NC}"
+    else
+        echo -e "${RED}❌ Failed to download captioned video${NC}"
+    fi
+fi
+
+# Check DynamoDB for editing metadata
+echo ""
+echo -e "${BLUE}Checking DynamoDB for editing metadata...${NC}"
+aws dynamodb get-item \
+    --table-name highlightai-videos \
+    --key "{\"videoId\": {\"S\": \"${VIDEO_ID}\"}}" \
+    --output json 2>/dev/null | jq '.Item | {status, keyMoments, editedVideo}' || echo "Could not retrieve metadata"
+
 
 # Cleanup test file
-rm -f "${TEST_VIDEO_FILE}"
 
 echo ""
 echo "============================"
 echo -e "${GREEN}✅ All tests completed!${NC}"
 echo ""
 echo "Test Summary:"
+echo "Test Summary:"
 echo "  User Pool ID: ${USER_POOL_ID}"
 echo "  Test Email: ${TEST_EMAIL}"
 echo "  Video ID: ${VIDEO_ID}"
 echo "  Upload Status: $([ "${UPLOAD_HTTP_CODE}" = "200" ] && echo "SUCCESS" || echo "FAILED")"
+echo "  Edited Videos Status: $([ -z "$EDITED_VIDEOS" ] && echo "NOT FOUND (check Lambda logs)" || echo "FOUND in S3")"

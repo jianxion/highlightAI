@@ -32,9 +32,13 @@ STACK_NAME="highlightai-auth-upload"
 echo -e "${YELLOW}Stack Name: ${STACK_NAME}${NC}"
 echo ""
 
-# Build SAM application
-echo "📦 Building SAM application..."
-sam build
+echo "🔨 Building SAM application..."
+# Clean build - remove old artifacts
+rm -rf .aws-sam/
+rm -rf lambdas/**/__pycache__
+
+# Build with container (consistent environment)
+sam build --use-container
 
 # Deploy
 echo ""

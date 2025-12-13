@@ -93,7 +93,7 @@ Resources:
           - Id: DeleteOldEditedVideos
             Status: Enabled
             ExpirationInDays: 7
-
+  
   # SQS QUEUE FOR UPLOAD NOTIFICATIONS
   UploadQueue:
     Type: AWS::SQS::Queue
@@ -371,13 +371,13 @@ Resources:
                 Action:
                   - s3:GetObject
                   - s3:HeadObject
-                Resource: !Sub ${RawVideosBucket.Arn}/videos/*
+                Resource: !Sub ${RawVideosBucket.Arn}/*
               
               # Write edited videos to S3
               - Effect: Allow
                 Action:
                   - s3:PutObject
-                Resource: !Sub ${EditedVideosBucket.Arn}/edited/*
+                Resource: !Sub ${EditedVideosBucket.Arn}/*
               
               # Update DynamoDB videos table
               - Effect: Allow
