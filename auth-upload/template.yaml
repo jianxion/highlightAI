@@ -10,6 +10,29 @@ Globals:
 
 Resources:
   # S3 BUCKET FOR RAW VIDEO UPLOADS
+    # S3 BUCKET FOR LAMBDA LAYERS
+  # LayersBucket:
+  #   Type: AWS::S3::Bucket
+  #   Properties:
+  #     BucketName: !Sub highlightai-layers-${AWS::AccountId}
+  #     PublicAccessBlockConfiguration:
+  #       BlockPublicAcls: true
+  #       BlockPublicPolicy: true
+  #       IgnorePublicAcls: true
+  #       RestrictPublicBuckets: true
+
+  # LAMBDA LAYER: FFMPEG
+  FFmpegLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      LayerName: highlightai-ffmpeg
+      Description: FFmpeg binary for video processing
+      Content:
+        S3Bucket: !Sub highlightai-layers-${AWS::AccountId}
+        S3Key: ffmpeg-layer.zip
+      CompatibleRuntimes:
+        - python3.11
+
   RawVideosBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -44,13 +67,39 @@ Resources:
           - Id: DeleteOldRawVideos
             Status: Enabled
             ExpirationInDays: 7
+    # S3 BUCKET FOR EDITED VIDEO OUTPUTS
+  EditedVideosBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub highlightai-edited-videos-${AWS::AccountId}
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedMethods:
+              - PUT
+              - POST
+              - GET
+            AllowedHeaders:
+              - '*'
+            MaxAge: 3000
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldEditedVideos
+            Status: Enabled
+            ExpirationInDays: 7
 
   # SQS QUEUE FOR UPLOAD NOTIFICATIONS
   UploadQueue:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: highlightai-upload-queue
-      VisibilityTimeout: 300
+      VisibilityTimeout: 660
       MessageRetentionPeriod: 86400
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt UploadDLQ.Arn
@@ -299,6 +348,99 @@ Resources:
           Properties:
             Queue: !GetAtt UploadQueue.Arn
             BatchSize: 10
+    # IAM ROLE FOR VIDEO EDITOR LAMBDA
+  VideoEditorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: VideoEditorPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Read raw videos from S3
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:HeadObject
+                Resource: !Sub ${RawVideosBucket.Arn}/videos/*
+              
+              # Write edited videos to S3
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: !Sub ${EditedVideosBucket.Arn}/edited/*
+              
+              # Update DynamoDB videos table
+              - Effect: Allow
+                Action:
+                  - dynamodb:UpdateItem
+                  - dynamodb:GetItem
+                Resource: !GetAtt VideosTable.Arn
+              
+              # Transcribe API
+              - Effect: Allow
+                Action:
+                  - transcribe:StartTranscriptionJob
+                  - transcribe:GetTranscriptionJob
+                Resource: !Sub arn:aws:transcribe:${AWS::Region}:${AWS::AccountId}:transcription-job/*
+               # ADD THIS: SQS permissions ← NEW
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt UploadQueue.Arn
+              
+              # Rekognition API
+              - Effect: Allow
+                Action:
+                  - rekognition:DetectLabels
+                Resource: '*'
+              
+              # CloudWatch logs (for debugging)
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+  # LAMBDA FUNCTION: VIDEO EDITOR
+  VideoEditorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: highlightai-video-editor
+      CodeUri: lambdas/video-editor/
+      Handler: handler.lambda_handler
+      Runtime: python3.11
+      Timeout: 600  # 15 minutes (max for processing)
+      MemorySize: 3008  # Max memory for performance
+      Layers:
+        - !Ref FFmpegLayer
+      Role: !GetAtt VideoEditorRole.Arn
+      Environment:
+        Variables:
+          RAW_VIDEOS_BUCKET: !Ref RawVideosBucket
+          EDITED_VIDEOS_BUCKET: !Ref EditedVideosBucket
+          VIDEOS_TABLE: !Ref VideosTable
+          REGION: !Ref AWS::Region
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt UploadQueue.Arn
+            BatchSize: 1
+            MaximumBatchingWindowInSeconds: 5
+
+
 
 Outputs:
   ApiUrl:
@@ -336,3 +478,21 @@ Outputs:
     Value: !Ref UploadQueue
     Export:
       Name: !Sub ${AWS::StackName}-UploadQueueUrl
+  EditedVideosBucketName:
+    Description: S3 Bucket for edited video outputs
+    Value: !Ref EditedVideosBucket
+    Export:
+      Name: !Sub ${AWS::StackName}-EditedVideosBucket
+  
+  VideoEditorFunctionArn:
+    Description: ARN of video editor Lambda function
+    Value: !GetAtt VideoEditorFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-VideoEditorArn
+
+  VideoEditorRoleArn:
+    Description: ARN of video editor IAM role
+    Value: !GetAtt VideoEditorRole.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-VideoEditorRole
+
