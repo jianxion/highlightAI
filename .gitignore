@@ -16,5 +16,5 @@ Thumbs.db
 
 # Documentation drafts
 *.docx
-ffmpeg-layer.zip
-layers/
+auth-upload/ffmpeg-layer.zip
+auth-upload/layers/
