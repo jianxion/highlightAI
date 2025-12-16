@@ -1,39 +1,61 @@
+import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
+import { useFeed } from "../hooks/useFeed";
+import VideoList from "../components/VideoList";
+import { dbg } from "../../../shared/utils/debug";
 
-const buttonStyle: React.CSSProperties = {
-  padding: "10px 16px",
-  borderRadius: "8px",
-  border: "none",
-  backgroundColor: "#2563eb", // blue-600
-  color: "#ffffff",
-  fontSize: "14px",
-  fontWeight: 500,
-  cursor: "pointer",
-};
-
-const secondaryButtonStyle: React.CSSProperties = {
-  ...buttonStyle,
-  backgroundColor: "#4b5563", // gray-600
-};
-
+/**
+ * Main feed page
+ * - Infinite scroll
+ * - Minimal navigation
+ */
 export default function FeedPage() {
+  const { items, loading, loadMore, hasMore } = useFeed();
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadingRef = useRef(false);
+
+  useEffect(() => {
+    if (!sentinelRef.current) return;
+
+    const observer = new IntersectionObserver(
+      async ([entry]) => {
+        if (entry.isIntersecting && hasMore && !loadingRef.current) {
+          loadingRef.current = true;
+          dbg("FEED", "Infinite scroll triggered");
+          await loadMore();
+          loadingRef.current = false;
+        }
+      },
+      { threshold: 0.6 }
+    );
+
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [hasMore, loadMore]);
+
   return (
-    <div style={{ padding: "20px" }}>
-      <h1>Feed Page</h1>
+    <div className="min-h-screen bg-slate-950 text-white px-4 py-6">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold">HighlightAI</h1>
 
-      <div style={{ display: "flex", gap: "12px", marginTop: "20px" }}>
-        <Link to="/upload">
-          <button style={buttonStyle}>Upload Video</button>
-        </Link>
-
-        <Link to="/signup">
-          <button style={secondaryButtonStyle}>Sign Up</button>
-        </Link>
-
-        <Link to="/signin">
-          <button style={secondaryButtonStyle}>Sign In</button>
-        </Link>
+        <div className="flex gap-3 text-sm">
+          <Link to="/upload">Upload</Link>
+          <Link to="/signup">Sign up</Link>
+          <Link to="/signin">Sign in</Link>
+        </div>
       </div>
+
+      {loading && <p className="text-sm text-slate-400">Loading feed…</p>}
+
+      <VideoList videos={items} />
+
+      <div ref={sentinelRef} className="h-10" />
+
+      {!hasMore && (
+        <p className="text-xs text-center text-slate-500 mt-4">
+          You’re all caught up
+        </p>
+      )}
     </div>
   );
 }

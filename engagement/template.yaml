@@ -1,0 +1,508 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: HighlightAI - Social Engagement & AppSync Module
+
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 30
+    MemorySize: 256
+
+Parameters:
+  AuthStackName:
+    Type: String
+    Default: highlightai-auth-upload
+    Description: Name of the auth-upload stack for imports
+
+Resources:
+  # S3 BUCKET FOR PROCESSED/EDITED VIDEOS
+  ProcessedVideosBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub highlightai-processed-videos-${AWS::AccountId}
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedMethods:
+              - GET
+              - HEAD
+            AllowedHeaders:
+              - '*'
+            MaxAge: 3600
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !GetAtt ProcessedVideoQueue.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: processed/
+
+  # SQS QUEUE FOR PROCESSED VIDEO NOTIFICATIONS
+  ProcessedVideoQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: highlightai-processed-video-queue
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 86400
+
+  ProcessedVideoQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ProcessedVideoQueue
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action:
+              - SQS:SendMessage
+            Resource: !GetAtt ProcessedVideoQueue.Arn
+            Condition:
+              StringLike:
+                aws:SourceArn: !Sub arn:aws:s3:::highlightai-processed-videos-${AWS::AccountId}
+
+  # DYNAMODB TABLES FOR ENGAGEMENT
+  LikesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: highlightai-likes
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: videoId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: videoId
+          KeyType: HASH
+        - AttributeName: userId
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: UserLikesIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: videoId
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  CommentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: highlightai-comments
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: videoId
+          AttributeType: S
+        - AttributeName: commentId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: N
+      KeySchema:
+        - AttributeName: videoId
+          KeyType: HASH
+        - AttributeName: commentId
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: VideoCommentsIndex
+          KeySchema:
+            - AttributeName: videoId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  ViewsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: highlightai-views
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: videoId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: viewedAt
+          AttributeType: N
+      KeySchema:
+        - AttributeName: videoId
+          KeyType: HASH
+        - AttributeName: userId
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: VideoViewsIndex
+          KeySchema:
+            - AttributeName: videoId
+              KeyType: HASH
+            - AttributeName: viewedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # SQS QUEUE FOR ENGAGEMENT ACTIONS (to handle concurrency)
+  EngagementQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: highlightai-engagement-queue
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 86400
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt EngagementDLQ.Arn
+        maxReceiveCount: 3
+
+  EngagementDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: highlightai-engagement-dlq
+      MessageRetentionPeriod: 1209600
+
+  # APPSYNC API (authorization via Cognito User Pools)
+  AppSyncApi:
+    Type: AWS::AppSync::GraphQLApi
+    Properties:
+      Name: HighlightAI-API
+      AuthenticationType: AMAZON_COGNITO_USER_POOLS
+      UserPoolConfig:
+        UserPoolId:
+          Fn::ImportValue: !Sub ${AuthStackName}-UserPoolId
+        AwsRegion: !Ref AWS::Region
+        DefaultAction: ALLOW
+      XrayEnabled: true
+
+  # APPSYNC SCHEMA
+  AppSyncSchema:
+    Type: AWS::AppSync::GraphQLSchema
+    Properties:
+      ApiId: !GetAtt AppSyncApi.ApiId
+      Definition: |
+        type Video {
+          videoId: ID!
+          userId: String!
+          userEmail: String
+          filename: String!
+          s3Key: String!
+          processedS3Key: String
+          bucket: String!
+          fileSize: Int!
+          status: String!
+          createdAt: AWSTimestamp!
+          updatedAt: AWSTimestamp!
+          likeCount: Int
+          commentCount: Int
+          viewCount: Int
+        }
+        
+        type Like {
+          videoId: ID!
+          userId: String!
+          createdAt: AWSTimestamp!
+        }
+        
+        type Comment {
+          commentId: ID!
+          videoId: ID!
+          userId: String!
+          userEmail: String
+          content: String!
+          createdAt: AWSTimestamp!
+        }
+        
+        type View {
+          videoId: ID!
+          userId: String!
+          viewedAt: AWSTimestamp!
+        }
+        
+        type EngagementCounts {
+          likeCount: Int!
+          commentCount: Int!
+          viewCount: Int!
+        }
+        
+        type Query {
+          getVideo(videoId: ID!): Video
+          listVideos(limit: Int, nextToken: String): [Video]
+          getVideoComments(videoId: ID!): [Comment]
+          getUserVideos(userId: String!): [Video]
+        }
+        
+        type Mutation {
+          likeVideo(videoId: ID!): EngagementCounts
+          unlikeVideo(videoId: ID!): EngagementCounts
+          addComment(videoId: ID!, content: String!): Comment
+          recordView(videoId: ID!): EngagementCounts
+        }
+        
+        type Subscription {
+          onVideoEngagementUpdate(videoId: ID!): EngagementCounts
+            @aws_subscribe(mutations: ["likeVideo", "unlikeVideo", "recordView"])
+        }
+        
+        schema {
+          query: Query
+          mutation: Mutation
+          subscription: Subscription
+        }
+
+  # LAMBDA: ENGAGEMENT HANDLER
+  EngagementHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: highlightai-engagement-handler
+      CodeUri: lambdas/engagement/
+      Handler: handler.lambda_handler
+      Environment:
+        Variables:
+          VIDEOS_TABLE:
+            Fn::ImportValue: !Sub ${AuthStackName}-VideosTable
+          LIKES_TABLE: !Ref LikesTable
+          COMMENTS_TABLE: !Ref CommentsTable
+          VIEWS_TABLE: !Ref ViewsTable
+          ENGAGEMENT_QUEUE_URL: !Ref EngagementQueue
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:DeleteItem
+                - dynamodb:UpdateItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 
+                  - arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}
+                  - TableName: 
+                      Fn::ImportValue: !Sub ${AuthStackName}-VideosTable
+                - !Sub 
+                  - arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}/index/*
+                  - TableName: 
+                      Fn::ImportValue: !Sub ${AuthStackName}-VideosTable
+                - !Sub ${LikesTable.Arn}
+                - !Sub ${LikesTable.Arn}/index/*
+                - !Sub ${CommentsTable.Arn}
+                - !Sub ${CommentsTable.Arn}/index/*
+                - !Sub ${ViewsTable.Arn}
+                - !Sub ${ViewsTable.Arn}/index/*
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+              Resource: !GetAtt EngagementQueue.Arn
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt EngagementQueue.Arn
+            BatchSize: 10
+
+  # APPSYNC DATA SOURCE - Lambda
+  EngagementDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt AppSyncApi.ApiId
+      Name: EngagementLambdaDataSource
+      Type: AWS_LAMBDA
+      ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
+      LambdaConfig:
+        LambdaFunctionArn: !GetAtt EngagementHandlerFunction.Arn
+
+  # APPSYNC DATA SOURCE - DynamoDB Videos Table
+  VideosDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt AppSyncApi.ApiId
+      Name: VideosTableDataSource
+      Type: AMAZON_DYNAMODB
+      ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
+      DynamoDBConfig:
+        TableName:
+          Fn::ImportValue: !Sub ${AuthStackName}-VideosTable
+        AwsRegion: !Ref AWS::Region
+
+  # APPSYNC SERVICE ROLE
+  AppSyncServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: appsync.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AppSyncDynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !Sub 
+                    - arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}
+                    - TableName: 
+                        Fn::ImportValue: !Sub ${AuthStackName}-VideosTable
+                  - !Sub ${LikesTable.Arn}
+                  - !Sub ${CommentsTable.Arn}
+                  - !Sub ${ViewsTable.Arn}
+        - PolicyName: AppSyncLambdaAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !GetAtt EngagementHandlerFunction.Arn
+
+  # APPSYNC RESOLVERS
+  GetVideoResolver:
+    Type: AWS::AppSync::Resolver
+    Properties:
+      ApiId: !GetAtt AppSyncApi.ApiId
+      TypeName: Query
+      FieldName: getVideo
+      DataSourceName: !GetAtt VideosDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "GetItem",
+          "key": {
+            "videoId": $util.dynamodb.toDynamoDBJson($ctx.args.videoId)
+          }
+        }
+      ResponseMappingTemplate: |
+        $util.toJson($ctx.result)
+
+  LikeVideoResolver:
+    Type: AWS::AppSync::Resolver
+    Properties:
+      ApiId: !GetAtt AppSyncApi.ApiId
+      TypeName: Mutation
+      FieldName: likeVideo
+      DataSourceName: !GetAtt EngagementDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": {
+            "action": "likeVideo",
+            "videoId": "$ctx.args.videoId",
+            "userId": "$ctx.identity.sub",
+            "userEmail": "$ctx.identity.claims.email"
+          }
+        }
+      ResponseMappingTemplate: |
+        $util.toJson($ctx.result)
+
+  UnlikeVideoResolver:
+    Type: AWS::AppSync::Resolver
+    Properties:
+      ApiId: !GetAtt AppSyncApi.ApiId
+      TypeName: Mutation
+      FieldName: unlikeVideo
+      DataSourceName: !GetAtt EngagementDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": {
+            "action": "unlikeVideo",
+            "videoId": "$ctx.args.videoId",
+            "userId": "$ctx.identity.sub"
+          }
+        }
+      ResponseMappingTemplate: |
+        $util.toJson($ctx.result)
+
+  AddCommentResolver:
+    Type: AWS::AppSync::Resolver
+    Properties:
+      ApiId: !GetAtt AppSyncApi.ApiId
+      TypeName: Mutation
+      FieldName: addComment
+      DataSourceName: !GetAtt EngagementDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": {
+            "action": "addComment",
+            "videoId": "$ctx.args.videoId",
+            "content": "$ctx.args.content",
+            "userId": "$ctx.identity.sub",
+            "userEmail": "$ctx.identity.claims.email"
+          }
+        }
+      ResponseMappingTemplate: |
+        $util.toJson($ctx.result)
+
+  RecordViewResolver:
+    Type: AWS::AppSync::Resolver
+    Properties:
+      ApiId: !GetAtt AppSyncApi.ApiId
+      TypeName: Mutation
+      FieldName: recordView
+      DataSourceName: !GetAtt EngagementDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": {
+            "action": "recordView",
+            "videoId": "$ctx.args.videoId",
+            "userId": "$ctx.identity.sub"
+          }
+        }
+      ResponseMappingTemplate: |
+        $util.toJson($ctx.result)
+
+Outputs:
+  AppSyncApiUrl:
+    Description: AppSync GraphQL API URL
+    Value: !GetAtt AppSyncApi.GraphQLUrl
+    Export:
+      Name: !Sub ${AWS::StackName}-AppSyncApiUrl
+
+  AppSyncApiId:
+    Description: AppSync API ID
+    Value: !GetAtt AppSyncApi.ApiId
+    Export:
+      Name: !Sub ${AWS::StackName}-AppSyncApiId
+
+  ProcessedVideosBucketName:
+    Description: S3 Bucket for processed/edited videos
+    Value: !Ref ProcessedVideosBucket
+    Export:
+      Name: !Sub ${AWS::StackName}-ProcessedVideosBucket
+
+  EngagementQueueUrl:
+    Description: SQS Queue URL for engagement actions
+    Value: !Ref EngagementQueue
+    Export:
+      Name: !Sub ${AWS::StackName}-EngagementQueueUrl
+
+  LikesTableName:
+    Description: DynamoDB Table for likes
+    Value: !Ref LikesTable
+
+  CommentsTableName:
+    Description: DynamoDB Table for comments
+    Value: !Ref CommentsTable
+
+  ViewsTableName:
+    Description: DynamoDB Table for views
+    Value: !Ref ViewsTable

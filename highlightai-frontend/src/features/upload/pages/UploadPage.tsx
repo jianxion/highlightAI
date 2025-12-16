@@ -12,7 +12,7 @@ export default function UploadPage() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [isRecording, setIsRecording] = useState(false);
+  // const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
 
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
@@ -153,7 +153,7 @@ export default function UploadPage() {
 
       mediaRecorderRef.current = recorder;
       recorder.start();
-      setIsRecording(true);
+      // setIsRecording(true);
       setRecordSeconds(0);
       setMode("record");
 
@@ -188,7 +188,6 @@ export default function UploadPage() {
       mediaStreamRef.current = null;
     }
 
-    setIsRecording(false);
     setRecordSeconds(0);
 
     if (cancelOnly) {
