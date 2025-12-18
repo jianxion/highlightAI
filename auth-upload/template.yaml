@@ -45,12 +45,39 @@ Resources:
             Status: Enabled
             ExpirationInDays: 7
 
+  # S3 BUCKET FOR EDITED VIDEO OUTPUTS (Debika's contribution)
+  EditedVideosBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub highlightai-edited-videos-${AWS::AccountId}
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedMethods:
+              - PUT
+              - POST
+              - GET
+            AllowedHeaders:
+              - '*'
+            MaxAge: 3000
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldEditedVideos
+            Status: Enabled
+            ExpirationInDays: 7
+
   # SQS QUEUE FOR UPLOAD NOTIFICATIONS
   UploadQueue:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: highlightai-upload-queue
-      VisibilityTimeout: 300
+      VisibilityTimeout: 660  # Increased for video processing
       MessageRetentionPeriod: 86400
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt UploadDLQ.Arn
@@ -294,6 +321,7 @@ Resources:
         Variables:
           RAW_VIDEOS_BUCKET: !Ref RawVideosBucket
           VIDEOS_TABLE: !Ref VideosTable
+          EDITED_VIDEOS_BUCKET: !Ref EditedVideosBucket
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -350,6 +378,179 @@ Resources:
             Queue: !GetAtt UploadQueue.Arn
             BatchSize: 10
 
+  # ========================================
+  # DEBIKA'S AI VIDEO PROCESSING PIPELINE
+  # ========================================
+
+  # IAM ROLE FOR MEDIACONVERT
+  MediaConvertRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: mediaconvert.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: MediaConvertS3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  - !Sub '${RawVideosBucket.Arn}/*'
+                  - !Sub '${EditedVideosBucket.Arn}/*'
+
+  # IAM ROLE FOR VIDEO EDITOR LAMBDA
+  VideoEditorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: VideoEditorPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # S3 Access
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:HeadObject
+                  - s3:PutObject
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                Resource:
+                  - !Sub ${RawVideosBucket.Arn}
+                  - !Sub ${RawVideosBucket.Arn}/*
+                  - !Sub ${EditedVideosBucket.Arn}
+                  - !Sub ${EditedVideosBucket.Arn}/*
+              
+              # Bedrock Access (AI)
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: '*'
+              
+              # DynamoDB Access
+              - Effect: Allow
+                Action:
+                  - dynamodb:UpdateItem
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                Resource: !GetAtt VideosTable.Arn
+              
+              # Transcribe Access
+              - Effect: Allow
+                Action:
+                  - transcribe:StartTranscriptionJob
+                  - transcribe:GetTranscriptionJob
+                Resource: '*'
+              
+              # Rekognition Access
+              - Effect: Allow
+                Action:
+                  - rekognition:*
+                Resource: '*'
+              
+              # MediaConvert Access
+              - Effect: Allow
+                Action:
+                  - mediaconvert:CreateJob
+                  - mediaconvert:DescribeEndpoints
+                  - mediaconvert:GetJob
+                Resource: '*'
+              
+              # SQS Access
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:SendMessage
+                Resource:
+                  - !GetAtt VideoProcessingQueue.Arn
+              
+              # STS Access
+              - Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: '*'
+              
+              # Pass MediaConvert role
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource: !GetAtt MediaConvertRole.Arn
+
+  # LAMBDA: VIDEO EDITOR (AI PROCESSING)
+  VideoEditorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: highlightai-video-editor
+      CodeUri: lambdas/video-editor/
+      Handler: handler.lambda_handler
+      Runtime: python3.11
+      Timeout: 600  # 10 minutes for video processing
+      MemorySize: 3008  # Max memory for performance
+      Role: !GetAtt VideoEditorRole.Arn
+      Environment:
+        Variables:
+          RAW_VIDEOS_BUCKET: !Ref RawVideosBucket
+          EDITED_VIDEOS_BUCKET: !Ref EditedVideosBucket
+          VIDEOS_TABLE: !Ref VideosTable
+          REGION: !Ref AWS::Region
+      Events:
+        VideoProcessingEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt VideoProcessingQueue.Arn
+            BatchSize: 1
+            MaximumBatchingWindowInSeconds: 5
+
+  # LAMBDA: CONSOLIDATION (COMBINES AI RESULTS)
+  ConsolidationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: highlightai-consolidation
+      CodeUri: lambdas/consolidation/
+      Handler: handler.consolidation_handler
+      Runtime: python3.11
+      Timeout: 600
+      MemorySize: 1024
+      Role: !GetAtt VideoEditorRole.Arn
+      Environment:
+        Variables:
+          RAW_VIDEOS_BUCKET: !Ref RawVideosBucket
+          EDITED_VIDEOS_BUCKET: !Ref EditedVideosBucket
+          VIDEOS_TABLE: !Ref VideosTable
+          REGION: !Ref AWS::Region
+          MEDIA_CONVERT_ROLE_ARN: !GetAtt MediaConvertRole.Arn
+      Events:
+        TranscribeComplete:
+          Type: CloudWatchEvent
+          Properties:
+            Pattern:
+              source:
+                - aws.transcribe
+              detail-type:
+                - Transcribe Job State Change
+              detail:
+                TranscriptionJobStatus:
+                  - COMPLETED
+
 Outputs:
   ApiUrl:
     Description: API Gateway endpoint URL
@@ -398,3 +599,27 @@ Outputs:
     Value: !GetAtt VideoProcessingQueue.Arn
     Export:
       Name: !Sub ${AWS::StackName}-VideoProcessingQueueArn
+
+  EditedVideosBucketName:
+    Description: S3 Bucket for edited video outputs (Debika's AI processing)
+    Value: !Ref EditedVideosBucket
+    Export:
+      Name: !Sub ${AWS::StackName}-EditedVideosBucket
+
+  VideoEditorFunctionArn:
+    Description: ARN of video editor Lambda function
+    Value: !GetAtt VideoEditorFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-VideoEditorArn
+
+  ConsolidationFunctionArn:
+    Description: ARN of consolidation Lambda function
+    Value: !GetAtt ConsolidationFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-ConsolidationArn
+
+  MediaConvertRoleArn:
+    Description: ARN of MediaConvert IAM role
+    Value: !GetAtt MediaConvertRole.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-MediaConvertRole

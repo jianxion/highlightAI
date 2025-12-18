@@ -24,8 +24,8 @@ echo "============================"
 echo ""
 
 # Test data
-TEST_EMAIL="monishsreekanth07@gmail.com" ## replace with your email to receive verification code
-TEST_PASSWORD="TestPass123!" # Replace with your desired test password
+TEST_EMAIL="frankshenjx@gmail.com" ## replace with your email to receive verification code
+TEST_PASSWORD="Sjx990617" # Replace with your desired test password
 TEST_NAME="monish"
 
 echo -e "${BLUE}Test User:${NC}"
@@ -156,11 +156,17 @@ sleep 1
 # 5. Test Video Upload to S3
 echo -e "${YELLOW}5️⃣  Testing Video Upload to S3...${NC}"
 
-# Create a small test video file (1KB with random data)
-TEST_VIDEO_FILE="/tmp/test-video-${VIDEO_ID}.mp4"
-dd if=/dev/urandom of="${TEST_VIDEO_FILE}" bs=1024 count=10 2>/dev/null
+# Use real test video for AI processing (Debika's contribution)
+TEST_VIDEO_FILE="test-videos/shooting.mp4"
 
-echo -e "${BLUE}Created test video file: ${TEST_VIDEO_FILE} (10KB)${NC}"
+if [ ! -f "${TEST_VIDEO_FILE}" ]; then
+    echo -e "${RED}❌ Test video not found: ${TEST_VIDEO_FILE}${NC}"
+    echo -e "${BLUE}Falling back to random data...${NC}"
+    TEST_VIDEO_FILE="/tmp/test-video-${VIDEO_ID}.mp4"
+    dd if=/dev/urandom of="${TEST_VIDEO_FILE}" bs=1024 count=10 2>/dev/null
+fi
+
+echo -e "${BLUE}Using test video file: ${TEST_VIDEO_FILE}${NC}"
 echo -e "${BLUE}Uploading to S3...${NC}"
 
 UPLOAD_RESPONSE=$(curl -s -X PUT "${UPLOAD_URL}" \
@@ -175,24 +181,57 @@ echo -e "${BLUE}HTTP Status Code: ${UPLOAD_HTTP_CODE}${NC}"
 if [ "${UPLOAD_HTTP_CODE}" = "200" ]; then
     echo -e "${GREEN}✅ Video uploaded successfully to S3${NC}"
     
-    # Wait for SQS processing
-    echo -e "${BLUE}Waiting 5 seconds for SQS processing...${NC}"
-    sleep 5
+    # Wait for video processing (AI analysis takes time)
+    echo -e "${BLUE}Waiting 60 seconds for AI video processing...${NC}"
+    for i in {60..1}; do
+        echo -ne "\r${BLUE}$i seconds remaining...${NC}"
+        sleep 1
+    done
+    echo ""
     
     # Check DynamoDB for video status
     echo -e "${BLUE}Checking video status in DynamoDB...${NC}"
-    aws dynamodb get-item \
+    VIDEO_STATUS=$(aws dynamodb get-item \
         --table-name highlightai-videos \
         --key "{\"videoId\": {\"S\": \"${VIDEO_ID}\"}}" \
-        --query 'Item.status.S' \
-        --output text 2>/dev/null || echo "Status check skipped (requires AWS CLI configured)"
+        --output json 2>/dev/null | jq -r '.Item.status.S // "NOT_FOUND"')
+    echo -e "${BLUE}Video Status: ${VIDEO_STATUS}${NC}"
+    
+    # 6. Check for AI-processed videos (Debika's contribution)
+    echo ""
+    echo -e "${YELLOW}6️⃣  Checking AI-Processed Videos...${NC}"
+    
+    EDITED_BUCKET=$(echo "${RAW_VIDEOS_BUCKET}" | sed 's/raw/edited/')
+    echo -e "${BLUE}Edited Videos Bucket: ${EDITED_BUCKET}${NC}"
+    
+    # Check for edited videos
+    EDITED_VIDEOS=$(aws s3 ls "s3://${EDITED_BUCKET}/" --recursive 2>/dev/null | grep "${VIDEO_ID}" || true)
+    
+    if [ -z "$EDITED_VIDEOS" ]; then
+        echo -e "${YELLOW}⚠️  No edited videos found yet${NC}"
+        echo -e "${BLUE}This is normal - AI processing may take several minutes${NC}"
+        echo -e "${BLUE}Check Lambda logs: aws logs tail /aws/lambda/highlightai-video-editor --follow${NC}"
+    else
+        echo -e "${GREEN}✅ Edited videos found!${NC}"
+        echo "${EDITED_VIDEOS}"
+        
+        # Check DynamoDB for AI metadata
+        echo ""
+        echo -e "${BLUE}Checking AI processing metadata...${NC}"
+        aws dynamodb get-item \
+            --table-name highlightai-videos \
+            --key "{\"videoId\": {\"S\": \"${VIDEO_ID}\"}}" \
+            --output json 2>/dev/null | jq '.Item | {status, transcribeJobId, rekognitionJobId, keyMoments}' || echo "Metadata not available"
+    fi
 else
     echo -e "${RED}❌ Video upload failed${NC}"
     echo "${UPLOAD_RESPONSE}" | sed '/HTTP_CODE:/d'
 fi
 
-# Cleanup test file
-rm -f "${TEST_VIDEO_FILE}"
+# Cleanup test file (only if using temp file)
+if [[ "${TEST_VIDEO_FILE}" == "/tmp/"* ]]; then
+    rm -f "${TEST_VIDEO_FILE}"
+fi
 
 echo ""
 echo "============================"
@@ -200,6 +239,8 @@ echo -e "${GREEN}✅ All tests completed!${NC}"
 echo ""
 echo "Test Summary:"
 echo "  User Pool ID: ${USER_POOL_ID}"
+echo "  Raw Videos Bucket: ${RAW_VIDEOS_BUCKET}"
+echo "  Edited Videos Bucket: ${EDITED_BUCKET}"
 echo "  Test Email: ${TEST_EMAIL}"
 echo "  Video ID: ${VIDEO_ID}"
 echo "  Upload Status: $([ "${UPLOAD_HTTP_CODE}" = "200" ] && echo "SUCCESS" || echo "FAILED")"

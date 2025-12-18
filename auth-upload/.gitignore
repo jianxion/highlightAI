@@ -1,0 +1,7 @@
+__pycache__/
+.aws-sam/
+.env
+.vscode/
+.DS_Store
+*.log
+.git
