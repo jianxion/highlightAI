@@ -68,6 +68,11 @@ BUCKET_NAME=$(aws cloudformation describe-stacks \
     --query "Stacks[0].Outputs[?OutputKey=='RawVideosBucketName'].OutputValue" \
     --output text)
 
+PROCESSING_QUEUE_URL=$(aws cloudformation describe-stacks \
+    --stack-name "${STACK_NAME}" \
+    --query "Stacks[0].Outputs[?OutputKey=='VideoProcessingQueueUrl'].OutputValue" \
+    --output text)
+
 # Save to .env file
 echo ""
 echo "💾 Saving configuration to .env file..."
@@ -78,6 +83,7 @@ API_URL=${API_URL}
 USER_POOL_ID=${USER_POOL_ID}
 CLIENT_ID=${CLIENT_ID}
 RAW_VIDEOS_BUCKET=${BUCKET_NAME}
+VIDEO_PROCESSING_QUEUE_URL=${PROCESSING_QUEUE_URL}
 EOF
 
 echo ""
@@ -94,5 +100,8 @@ echo "  User Pool ID: ${USER_POOL_ID}"
 echo "  Client ID: ${CLIENT_ID}"
 echo ""
 echo "S3 Bucket: ${BUCKET_NAME}"
+echo ""
+echo "SQS Queue for Video Editing Team:"
+echo "  Queue URL: ${PROCESSING_QUEUE_URL}"
 echo "================================================"
 echo ""
