@@ -183,6 +183,7 @@ Resources:
         AllowCredentials: false
       Auth:
         DefaultAuthorizer: CognitoAuthorizer
+        AddDefaultAuthorizerToCorsPreflight: false  # Fix CORS preflight OPTIONS requests
         Authorizers:
           CognitoAuthorizer:
             UserPoolArn: !GetAtt UserPool.Arn
@@ -251,6 +252,33 @@ Resources:
           Properties:
             RestApiId: !Ref ApiGateway
             Path: /auth/signin
+            Method: POST
+            Auth:
+              Authorizer: NONE
+
+  # LAMBDA: CONFIRM SIGNUP (OTP EMAIL VERIFICATION)
+  ConfirmSignupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: highlightai-confirm-signup
+      CodeUri: lambdas/auth/
+      Handler: confirm_signup.lambda_handler
+      Environment:
+        Variables:
+          CLIENT_ID: !Ref UserPoolClient
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:ConfirmSignUp
+              Resource: !GetAtt UserPool.Arn
+      Events:
+        ConfirmSignupApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /auth/confirm
             Method: POST
             Auth:
               Authorizer: NONE

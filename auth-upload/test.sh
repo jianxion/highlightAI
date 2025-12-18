@@ -55,15 +55,19 @@ if echo "${SIGNUP_RESPONSE}" | jq -e '.userId' > /dev/null; then
     echo -e "${BLUE}Enter the 6-digit verification code:${NC}"
     read -r VERIFICATION_CODE
 
-    # 2. Confirm Email
+    # 2. Confirm Email (Using API Endpoint)
     echo ""
-    echo -e "${YELLOW}2️⃣  Confirming Email...${NC}"
-    aws cognito-idp confirm-sign-up \
-        --client-id "${CLIENT_ID}" \
-        --username "${TEST_EMAIL}" \
-        --confirmation-code "${VERIFICATION_CODE}"
+    echo -e "${YELLOW}2️⃣  Confirming Email via API...${NC}"
+    CONFIRM_RESPONSE=$(curl -s -X POST "${API_URL}/auth/confirm" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"email\": \"${TEST_EMAIL}\",
+            \"code\": \"${VERIFICATION_CODE}\"
+        }")
 
-    if [ $? -eq 0 ]; then
+    echo "${CONFIRM_RESPONSE}" | jq '.'
+
+    if echo "${CONFIRM_RESPONSE}" | jq -e '.message' | grep -q "confirmed successfully"; then
         echo -e "${GREEN}✅ Email confirmed successfully${NC}"
     else
         echo -e "${RED}❌ Email confirmation failed${NC}"
