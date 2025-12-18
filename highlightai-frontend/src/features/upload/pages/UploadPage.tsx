@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useVideoUpload } from "../hooks/useVideoUpload";
 import { useUploadAnalytics } from "../../analytics/hooks/useUploadAnalytics";
 
@@ -297,197 +297,193 @@ export default function UploadPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex justify-center px-4 py-8">
-      <div className="w-full max-w-xl space-y-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-white">Upload a Highlight</h1>
-          <p className="text-sm text-slate-300 mt-1">
-            Record or upload a short clip (max 2 minutes, under 200MB).
-          </p>
-        </div>
-
-        {error && (
-          <div className="rounded-xl border border-red-500/40 bg-red-950/40 px-4 py-3 text-sm text-red-200">
-            {error}
-          </div>
-        )}
-
-        <div className="rounded-3xl border border-white/10 bg-white/5 shadow-xl shadow-black/50 backdrop-blur-2xl p-4 md:p-6 flex flex-col gap-4">
-          <div className="aspect-[9/16] w-full max-h-[480px] bg-black/70 rounded-2xl overflow-hidden flex items-center justify-center relative">
-            
-            {/* Camera Preview (shown in idle and record modes) */}
-            {mode !== "preview" && (
-              <>
-                <video
-                  ref={cameraPreviewRef}
-                  className="h-full w-full object-cover"
-                  autoPlay
-                  muted
-                  playsInline
-                />
-                
-                {/* Recording indicator */}
-                {mode === "record" && (
-                  <div className="absolute top-3 left-3 flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-                    <span className="text-xs font-semibold text-red-200">
-                      Recording • {recordSeconds}s
-                    </span>
-                  </div>
-                )}
-
-                {/* Loading indicator while camera initializes */}
-                {!cameraReady && mode === "idle" && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                    <div className="text-center">
-                      <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-white border-r-transparent mb-2"></div>
-                      <p className="text-sm text-white">Starting camera...</p>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* Recorded/Uploaded Video Preview */}
-            {mode === "preview" && videoUrl && (
-              <video
-                ref={videoPreviewRef}
-                className="h-full w-full object-cover"
-                src={videoUrl}
-                controls
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex flex-col">
+      {/* Header with Back to Feed */}
+      <div className="border-b border-white/10 backdrop-blur-md bg-slate-950/80 sticky top-0 z-10">
+        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
+          <Link 
+            to="/" 
+            className="flex items-center gap-2 text-slate-300 hover:text-white transition"
+          >
+            <svg 
+              className="w-5 h-5" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M15 19l-7-7 7-7" 
               />
-            )}
+            </svg>
+            <span className="font-medium">Back to Feed</span>
+          </Link>
+
+          <h1 className="text-lg font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+            Upload Highlight
+          </h1>
+
+          <Link 
+            to="/profile" 
+            className="text-slate-300 hover:text-white text-sm transition"
+          >
+            Profile
+          </Link>
+        </div>
+      </div>
+
+      {/* Upload Content */}
+      <div className="flex-1 flex justify-center px-4 py-8">
+        <div className="w-full max-w-xl space-y-6">
+          <div className="text-center">
+            <p className="text-sm text-slate-300">
+              Record or upload a short clip (max 2 minutes, under 200MB).
+            </p>
           </div>
 
-          <div className="flex flex-col gap-3">
-            {mode === "idle" && (
-              <>
-                <button
-                  onClick={startRecording}
-                  disabled={!cameraReady}
-                  className="w-full rounded-full bg-gradient-to-r from-pink-500 via-red-500 to-orange-500 py-2.5 text-sm font-semibold text-white shadow-lg shadow-pink-500/40 hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                >
-                  {cameraReady ? "Start Recording" : "Camera Loading..."}
-                </button>
+          {error && (
+            <div className="rounded-xl border border-red-500/40 bg-red-950/40 px-4 py-3 text-sm text-red-200">
+              {error}
+            </div>
+          )}
 
-                <div className="flex items-center gap-3">
-                  <div className="h-px flex-1 bg-white/10" />
-                  <span className="text-xs text-slate-400">or</span>
-                  <div className="h-px flex-1 bg-white/10" />
-                </div>
-
-                <label className="w-full cursor-pointer rounded-full border border-white/15 bg-white/5 py-2.5 text-sm font-medium text-slate-100 text-center hover:bg-white/10 transition">
-                  Upload from device
-                  <input
-                    type="file"
-                    accept="video/*"
-                    className="hidden"
-                    onChange={handleFileSelect}
+          <div className="rounded-3xl border border-white/10 bg-white/5 shadow-xl shadow-black/50 backdrop-blur-2xl p-4 md:p-6 flex flex-col gap-4">
+            <div className="aspect-[9/16] w-full max-h-[480px] bg-black/70 rounded-2xl overflow-hidden flex items-center justify-center relative">
+              
+              {/* Camera Preview (shown in idle and record modes) */}
+              {mode !== "preview" && (
+                <>
+                  <video
+                    ref={cameraPreviewRef}
+                    className="h-full w-full object-cover"
+                    autoPlay
+                    muted
+                    playsInline
                   />
-                </label>
-              </>
-            )}
-
-            {mode === "record" && (
-              <button
-                onClick={stopRecording}
-                className="w-full rounded-full bg-red-600 py-2.5 text-sm font-semibold text-white shadow-lg shadow-red-500/40 hover:bg-red-500 transition"
-              >
-                Stop Recording
-              </button>
-            )}
-
-            {mode === "preview" && (
-              <div className="flex flex-col gap-2">
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleRetake}
-                    className="flex-1 rounded-full border border-white/20 bg-transparent py-2.5 text-sm font-medium text-slate-100 hover:bg-white/10 transition"
-                  >
-                    Retake
-                  </button>
-                  <button
-                    onClick={handleUpload}
-                    disabled={status === "uploading"}
-                    className="flex-1 rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/40 hover:opacity-95 disabled:opacity-60 disabled:cursor-not-allowed transition"
-                  >
-                    {status === "uploading" ? "Uploading..." : "Upload Clip"}
-                  </button>
-                </div>
-
-                {status === "uploading" && (
-                  <div className="mt-2">
-                    <div className="flex justify-between text-xs text-slate-300 mb-1">
-                      <span>Uploading</span>
-                      <span>{progress}%</span>
+                  
+                  {/* Recording indicator */}
+                  {mode === "record" && (
+                    <div className="absolute top-3 left-3 flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                      <span className="text-xs font-semibold text-red-200">
+                        Recording • {recordSeconds}s
+                      </span>
                     </div>
-                    <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-indigo-400 to-pink-400 transition-all"
-                        style={{ width: `${progress}%` }}
-                      />
+                  )}
+
+                  {/* Loading indicator while camera initializes */}
+                  {!cameraReady && mode === "idle" && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                      <div className="text-center">
+                        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-white border-r-transparent mb-2"></div>
+                        <p className="text-sm text-white">Starting camera...</p>
+                      </div>
                     </div>
+                  )}
+                </>
+              )}
+
+              {/* Recorded/Uploaded Video Preview */}
+              {mode === "preview" && videoUrl && (
+                <video
+                  ref={videoPreviewRef}
+                  className="h-full w-full object-cover"
+                  src={videoUrl}
+                  controls
+                />
+              )}
+            </div>
+
+            <div className="flex flex-col gap-3">
+              {mode === "idle" && (
+                <>
+                  <button
+                    onClick={startRecording}
+                    disabled={!cameraReady}
+                    className="w-full rounded-full bg-gradient-to-r from-pink-500 via-red-500 to-orange-500 py-2.5 text-sm font-semibold text-white shadow-lg shadow-pink-500/40 hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  >
+                    {cameraReady ? "Start Recording" : "Camera Loading..."}
+                  </button>
+
+                  <div className="flex items-center gap-3">
+                    <div className="h-px flex-1 bg-white/10" />
+                    <span className="text-xs text-slate-400">or</span>
+                    <div className="h-px flex-1 bg-white/10" />
                   </div>
-                )}
 
-                {status === "success" && (
-                  <p className="mt-2 text-xs text-emerald-300">
-                    Upload complete! Redirecting to your profile...
-                  </p>
-                )}
+                  <label className="w-full cursor-pointer rounded-full border border-white/15 bg-white/5 py-2.5 text-sm font-medium text-slate-100 text-center hover:bg-white/10 transition">
+                    Upload from device
+                    <input
+                      type="file"
+                      accept="video/*"
+                      className="hidden"
+                      onChange={handleFileSelect}
+                    />
+                  </label>
+                </>
+              )}
 
-                {uploadError && (
-                  <p className="mt-2 text-xs text-red-300">
-                    {uploadError}
-                  </p>
-                )}
-              </div>
-            )}
+              {mode === "record" && (
+                <button
+                  onClick={stopRecording}
+                  className="w-full rounded-full bg-red-600 py-2.5 text-sm font-semibold text-white shadow-lg shadow-red-500/40 hover:bg-red-500 transition"
+                >
+                  Stop Recording
+                </button>
+              )}
+
+              {mode === "preview" && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleRetake}
+                      className="flex-1 rounded-full border border-white/20 bg-transparent py-2.5 text-sm font-medium text-slate-100 hover:bg-white/10 transition"
+                    >
+                      Retake
+                    </button>
+                    <button
+                      onClick={handleUpload}
+                      disabled={status === "uploading"}
+                      className="flex-1 rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/40 hover:opacity-95 disabled:opacity-60 disabled:cursor-not-allowed transition"
+                    >
+                      {status === "uploading" ? "Uploading..." : "Upload Clip"}
+                    </button>
+                  </div>
+
+                  {status === "uploading" && (
+                    <div className="mt-2">
+                      <div className="flex justify-between text-xs text-slate-300 mb-1">
+                        <span>Uploading</span>
+                        <span>{progress}%</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-indigo-400 to-pink-400 transition-all"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {status === "success" && (
+                    <p className="mt-2 text-xs text-emerald-300">
+                      Upload complete! Redirecting to your profile...
+                    </p>
+                  )}
+
+                  {uploadError && (
+                    <p className="mt-2 text-xs text-red-300">
+                      {uploadError}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 }
-
-
-/*
-## 📂 Complete File Structure
-
-Make sure you have this exact structure:
-
-src/features/analytics/
-├── api/
-│   └── analyticsApi.ts
-├── hooks/
-│   └── useUploadAnalytics.ts
-├── types/
-│   └── analytics.ts
-└── utils/
-    └── geolocation.ts
-
-src/features/upload/
-└── pages/
-    └── UploadPage.tsx
-
-
-## What This Does:
-
-1. **Location Tracking:** Captures user's location when upload page loads
-2. **Upload Start:** Tracks when user begins upload (with location)
-3. **Upload Complete:** Tracks successful upload with duration
-4. **Upload Failed:** Tracks failed uploads with error message
-5. **Console Logging:** All analytics events are logged to console
-6. **Non-blocking:** Analytics failures won't break the upload flow
-
-
-
-## Testing:
-
-Check your console logs. You should see:
-
-Location captured for upload: {latitude: ..., longitude: ..., accuracy: ...}
-Upload analytics sent: upload_start
-Upload analytics sent: upload_complete
-
-*/

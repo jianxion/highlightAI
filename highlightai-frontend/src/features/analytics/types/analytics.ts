@@ -1,3 +1,4 @@
+// ✅ Export Location interface so it can be imported elsewhere
 export interface Location {
   latitude: number;
   longitude: number;
@@ -28,7 +29,7 @@ export interface VideoViewEvent {
   isCompleted: boolean;
   watchCount: number;
   pauseCount: number;
-  location: GeolocationCoordinates | null;
+  location: Location | null;
   deviceType: "mobile" | "tablet" | "desktop";
   userAgent: string;
 }
@@ -41,7 +42,7 @@ export interface VideoUploadEvent {
   fileSize: number;
   duration: number;
   uploadDuration?: number;
-  recordingLocation?: GeolocationCoordinates;
+  recordingLocation?: Location;
   error?: string;
 }
 

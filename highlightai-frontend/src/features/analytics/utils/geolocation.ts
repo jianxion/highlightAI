@@ -1,4 +1,4 @@
-import { Location } from "../types/analytics";
+import type { Location } from "../types/analytics";
 
 export async function getCurrentLocation(): Promise<Location | null> {
   if (!navigator.geolocation) {
