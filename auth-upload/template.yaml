@@ -21,17 +21,10 @@ Resources:
   #       IgnorePublicAcls: true
   #       RestrictPublicBuckets: true
 
-  # LAMBDA LAYER: FFMPEG
+  # LAMBDA LAYER: FFMPEG (Removed per user request)
   # FFmpegLayer:
-  #   Type: AWS::Lambda::LayerVersion
-  #   Properties:
-  #     LayerName: highlightai-ffmpeg
-  #     Description: FFmpeg binary for video processing
-  #     Content:
-  #       S3Bucket: !Sub highlightai-layers-${AWS::AccountId}
-  #       S3Key: ffmpeg-layer.zip
-  #     CompatibleRuntimes:
-  #       - python3.11
+  #   Type: AWS::Serverless::LayerVersion
+  # ... (leaving commented out or removing)
 
   RawVideosBucket:
     Type: AWS::S3::Bucket
@@ -319,37 +312,8 @@ Resources:
             Path: /upload/presigned-url
             Method: POST
 
-  # LAMBDA: UPLOAD COMPLETE HANDLER
-  UploadCompleteFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: highlightai-upload-complete
-      CodeUri: lambdas/upload-complete/
-      Handler: handler.lambda_handler
-      Environment:
-        Variables:
-          VIDEOS_TABLE: !Ref VideosTable
-      Policies:
-        - Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Action:
-                - dynamodb:UpdateItem
-                - dynamodb:GetItem
-              Resource: !GetAtt VideosTable.Arn
-            - Effect: Allow
-              Action:
-                - sqs:ReceiveMessage
-                - sqs:DeleteMessage
-                - sqs:GetQueueAttributes
-              Resource: !GetAtt UploadQueue.Arn
-      Events:
-        SQSEvent:
-          Type: SQS
-          Properties:
-            Queue: !GetAtt UploadQueue.Arn
-            BatchSize: 10
     # IAM ROLE FOR VIDEO EDITOR LAMBDA
+  
   VideoEditorRole:
     Type: AWS::IAM::Role
     Properties:
@@ -363,63 +327,81 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: VideoEditorPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              # Read raw videos from S3
-              - Effect: Allow
-                Action:
-                  - s3:GetObject
-                  - s3:HeadObject
-                Resource: !Sub ${RawVideosBucket.Arn}/*
-              
-              # Write edited videos to S3
-              - Effect: Allow
-                Action:
-                  - s3:PutObject
-                Resource: !Sub ${EditedVideosBucket.Arn}/*
-              
-              # Update DynamoDB videos table
-              - Effect: Allow
-                Action:
-                  - dynamodb:UpdateItem
-                  - dynamodb:GetItem
-                Resource: !GetAtt VideosTable.Arn
-              
-              # Transcribe API
-              - Effect: Allow
-                Action:
-                  - transcribe:StartTranscriptionJob
-                  - transcribe:GetTranscriptionJob
-                Resource: !Sub arn:aws:transcribe:${AWS::Region}:${AWS::AccountId}:transcription-job/*
-               # ADD THIS: SQS permissions ← NEW
-              - Effect: Allow
-                Action:
-                  - sqs:ReceiveMessage
-                  - sqs:DeleteMessage
-                  - sqs:GetQueueAttributes
-                Resource: !GetAtt UploadQueue.Arn
-              
-              # Rekognition API
-              - Effect: Allow
-                Action:
-                  - rekognition:DetectLabels
-                Resource: '*'
-              
-              # CloudWatch logs (for debugging)
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
-              - Effect: Allow
-                Action:
-                  - mediaconvert:*
-                  - iam:PassRole
-                Resource: '*'
-  # ADD THIS AFTER VideoEditorRole:
+      - PolicyName: VideoEditorPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            # S3 Access
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:HeadObject
+                - s3:PutObject
+                - s3:GetBucketLocation
+                - s3:ListBucket
+              Resource:
+                - !Sub ${RawVideosBucket.Arn}
+                - !Sub ${RawVideosBucket.Arn}/*
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource: !Sub ${EditedVideosBucket.Arn}/*
+            
+            # Bedrock Access
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+             
+            # DynamoDB Access
+            - Effect: Allow
+              Action:
+                - dynamodb:UpdateItem
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource: !GetAtt VideosTable.Arn
+            
+            # Transcribe Access
+            - Effect: Allow
+              Action:
+                - transcribe:StartTranscriptionJob
+                - transcribe:GetTranscriptionJob
+              Resource: !Sub arn:aws:transcribe:${AWS::Region}:${AWS::AccountId}:transcription-job/*
+            
+            # Rekognition Access
+            - Effect: Allow
+              Action:
+                - rekognition:*
+              Resource: '*'
+            
+            # MediaConvert Access
+            - Effect: Allow
+              Action:
+                - mediaconvert:CreateJob
+                - mediaconvert:DescribeEndpoints
+                - mediaconvert:GetJob
+              Resource: '*'
+            
+            # SQS Access (for reading messages)
+            - Effect: Allow
+              Action:
+                - sqs:ReceiveMessage
+                - sqs:DeleteMessage
+                - sqs:GetQueueAttributes
+              Resource: !GetAtt UploadQueue.Arn
+            
+            # STS Access (for getting account ID)
+            - Effect: Allow
+              Action:
+                - sts:GetCallerIdentity
+              Resource: '*'
+            
+            # Pass MediaConvert role
+            - Effect: Allow
+              Action:
+                - iam:PassRole
+              Resource: !GetAtt MediaConvertRole.Arn
+
   MediaConvertRole:
     Type: AWS::IAM::Role
     Properties:
@@ -442,6 +424,7 @@ Resources:
                 Resource:
                   - !Sub '${RawVideosBucket.Arn}/*'
                   - !Sub '${EditedVideosBucket.Arn}/*'
+
 
   # LAMBDA FUNCTION: VIDEO EDITOR
   VideoEditorFunction:
@@ -472,6 +455,23 @@ Resources:
             MaximumBatchingWindowInSeconds: 5
 
 
+  ConsolidationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: highlightai-consolidation
+      CodeUri: lambdas/consolidation/
+      Handler: handler.consolidation_handler
+      Runtime: python3.11
+      Timeout: 600
+      MemorySize: 1024
+      Role: !GetAtt VideoEditorRole.Arn
+      Environment:
+        Variables:
+          RAW_VIDEOS_BUCKET: !Ref RawVideosBucket
+          EDITED_VIDEOS_BUCKET: !Ref EditedVideosBucket
+          VIDEOS_TABLE: !Ref VideosTable
+          REGION: !Ref AWS::Region
+          MEDIA_CONVERT_ROLE_ARN: !GetAtt MediaConvertRole.Arn
 
 Outputs:
   ApiUrl:
@@ -526,4 +526,16 @@ Outputs:
     Value: !GetAtt VideoEditorRole.Arn
     Export:
       Name: !Sub ${AWS::StackName}-VideoEditorRole
+  
+  ConsolidationFunctionArn:
+    Description: ARN of consolidation Lambda function
+    Value: !GetAtt ConsolidationFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-ConsolidationArn
+
+  MediaConvertRoleArn:
+    Description: ARN of MediaConvert IAM role
+    Value: !GetAtt MediaConvertRole.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-MediaConvertRole
 

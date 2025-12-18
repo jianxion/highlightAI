@@ -153,7 +153,7 @@ sleep 1
 echo -e "${YELLOW}5️⃣  Testing Video Upload to S3...${NC}"
 
 # Create a small test video file (1KB with random data)
-TEST_VIDEO_FILE="test-videos/vid1.mp4"
+TEST_VIDEO_FILE="test-videos/shooting.mp4"
 # dd if=/dev/urandom of="${TEST_VIDEO_FILE}" bs=1024 count=10 2>/dev/null
 
 echo -e "${BLUE}Created test video file: ${TEST_VIDEO_FILE} (10KB)${NC}"

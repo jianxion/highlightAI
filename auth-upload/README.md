@@ -18,11 +18,6 @@ User → API Gateway → Lambda → Cognito (Auth)
 
 - **Cognito User Pool** - Email/password authentication
 - **API Gateway** - REST API endpoints
-- **Lambda Functions**:
-  - `signup.py` - User registration
-  - `signin.py` - User authentication (returns JWT)
-  - `presigned-url/handler.py` - Generate S3 upload URLs
-  - `upload-complete/handler.py` - Handle upload completion events
 - **S3 Bucket** - Raw video storage
 - **DynamoDB Table** - Video metadata storage
 - **SQS Queue** - Upload event processing with DLQ
@@ -190,7 +185,9 @@ aws s3 ls s3://highlightai-raw-videos-dev-<your-account-id>/videos/
 3. **Request presigned URL** → Lambda validates JWT, creates DynamoDB entry
 4. **Upload to S3** → Client uploads directly to S3 (no backend bottleneck)
 5. **S3 triggers event** → SQS receives notification
-6. **Lambda processes** → Updates DynamoDB status to 'UPLOADED'
+6. **Lambda processes** → Transcribe + Rekognition analysis
+7. **Consolidation** → JSON analysis + MediaConvert job creation
+8. **Editing** → MediaConvert processes cuts and outputs final video to S3
 
 ## DynamoDB Schema
 

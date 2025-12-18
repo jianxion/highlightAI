@@ -38,7 +38,7 @@ rm -rf .aws-sam/
 rm -rf lambdas/**/__pycache__
 
 # Build with container (consistent environment)
-sam build --use-container
+sam build
 
 # Deploy
 echo ""
