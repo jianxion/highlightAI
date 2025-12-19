@@ -7,7 +7,11 @@ export interface ProfileVideo {
   userId: string;
   userEmail?: string;
   filename: string;
-  s3Key?: string; 
+  s3Key?: string;
+  processedS3Key?: string;
+  processedBucket?: string;
+  contentType?: string;
+  fileSize?: number;
   status: string;
   createdAt?: number;
   likeCount: number;
@@ -27,20 +31,29 @@ export function useProfile(userId: string) {
 
   if (error) {
     dbgError("PROFILE", "getUserVideos query failed", error);
+    console.error("Full GraphQL error:", error);
   }
 
-  const videos: ProfileVideo[] = (data?.getUserVideos ?? []).map((v: any) => ({
-    videoId: String(v.videoId),
-    userId: String(v.userId),
-    userEmail: v.userEmail,
-    filename: String(v.filename),
-    s3Key: v.s3Key,  //  Include s3Key
-    status: String(v.status),
-    createdAt: v.createdAt,
-    likeCount: Number(v.likeCount ?? 0),
-    commentCount: Number(v.commentCount ?? 0),
-    viewCount: Number(v.viewCount ?? 0),
-  }));
+  dbg("PROFILE", "useProfile hook state", { userId, loading, hasError: !!error, hasData: !!data, dataValue: data });
+
+  const videos: ProfileVideo[] = (data?.getUserVideos ?? [])
+    .filter((v: any) => v.status === 'COMPLETED' && v.processedS3Key && v.processedBucket)
+    .map((v: any) => ({
+      videoId: String(v.videoId),
+      userId: String(v.userId),
+      userEmail: v.userEmail,
+      filename: String(v.filename),
+      s3Key: v.s3Key,
+      processedS3Key: v.processedS3Key,
+      processedBucket: v.processedBucket,
+      contentType: v.contentType,
+      fileSize: v.fileSize,
+      status: String(v.status),
+      createdAt: v.createdAt,
+      likeCount: Number(v.likeCount ?? 0),
+      commentCount: Number(v.commentCount ?? 0),
+      viewCount: Number(v.viewCount ?? 0),
+    }));
 
   dbg("PROFILE", `Loaded ${videos.length} videos for user ${userId}`, videos);
 

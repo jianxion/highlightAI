@@ -21,11 +21,8 @@ def lambda_handler(event, context):
     Can be invoked by AppSync or SQS
     """
     try:
-<<<<<<< HEAD
-=======
         print(f"Event received: {json.dumps(event)}")
         
->>>>>>> monish-engagement
         # Check if invoked by AppSync or SQS
         if 'Records' in event:
             # SQS batch processing
@@ -36,11 +33,8 @@ def lambda_handler(event, context):
             
     except Exception as e:
         print(f"Error: {str(e)}")
-<<<<<<< HEAD
-=======
         import traceback
         print(traceback.format_exc())
->>>>>>> monish-engagement
         raise
 
 def process_sqs_batch(event):
@@ -59,22 +53,15 @@ def process_engagement_action(payload):
         'likeVideo': handle_like_video,
         'unlikeVideo': handle_unlike_video,
         'addComment': handle_add_comment,
-<<<<<<< HEAD
-        'recordView': handle_record_view
-=======
         'recordView': handle_record_view,
         'getComments': handle_get_comments,  # ✅ ADDED
->>>>>>> monish-engagement
     }
     
     handler = handlers.get(action)
     if not handler:
         raise ValueError(f"Unknown action: {action}")
     
-<<<<<<< HEAD
-=======
     print(f"Handling action: {action}")
->>>>>>> monish-engagement
     return handler(payload)
 
 def handle_like_video(payload):
@@ -189,9 +176,6 @@ def handle_add_comment(payload):
         }
     )
     
-<<<<<<< HEAD
-    return comment
-=======
     print(f"Comment added: {comment_id}")
     return convert_decimals(comment)
 
@@ -223,7 +207,6 @@ def handle_get_comments(payload):
     except ClientError as e:
         print(f"Error getting comments: {str(e)}")
         return []
->>>>>>> monish-engagement
 
 def handle_record_view(payload):
     """Record a video view"""
@@ -283,8 +266,6 @@ def get_engagement_counts(video_item):
         'commentCount': int(video_item.get('commentCount', 0)),
         'viewCount': int(video_item.get('viewCount', 0))
     }
-<<<<<<< HEAD
-=======
 
 def convert_decimals(obj):
     """Convert Decimal types to int/float for JSON serialization"""
@@ -295,4 +276,3 @@ def convert_decimals(obj):
     elif isinstance(obj, Decimal):
         return int(obj) if obj % 1 == 0 else float(obj)
     return obj
->>>>>>> monish-engagement

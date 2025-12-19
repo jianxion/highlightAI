@@ -38,14 +38,14 @@ export function useVideoUpload() {
       });
 
       // Request signed upload URL
-      const { uploadUrl, videoId } = await getPresignedUploadUrl(
+      const { presignedUrl, videoId } = await getPresignedUploadUrl(
         auth.idToken,
         file
       );
 
       console.log("Got presigned URL:", {
         videoId,
-        urlPreview: uploadUrl.substring(0, 100) + "...",
+        urlPreview: presignedUrl.substring(0, 100) + "...",
       });
 
       // Upload video to S3 (MUST match signed headers)
@@ -81,7 +81,7 @@ export function useVideoUpload() {
         };
 
         console.log("Starting S3 PUT request...");
-        xhr.open("PUT", uploadUrl);
+        xhr.open("PUT", presignedUrl);
         xhr.setRequestHeader("Content-Type", file.type);
         xhr.send(file);
       });

@@ -2,7 +2,7 @@ import { apiClient } from "../../../shared/utils/apiClient";
 
 export interface PresignedUrlResponse {
   videoId: string;
-  uploadUrl: string;
+  presignedUrl: string;
   s3Key: string;
   expiresIn: number;
 }
@@ -45,7 +45,7 @@ export async function getPresignedUploadUrl(
     console.log("API Response:", {
       status: res.status,
       videoId: res.data.videoId,
-      hasUploadUrl: !!res.data.uploadUrl,
+      hasPresignedUrl: !!res.data.presignedUrl,
     });
 
     return res.data;

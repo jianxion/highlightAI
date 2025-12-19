@@ -139,10 +139,10 @@ echo "${PRESIGNED_BODY}" | jq '.'
 echo -e "${BLUE}HTTP Status Code: ${HTTP_CODE}${NC}"
 
 
-UPLOAD_URL=$(echo "${PRESIGNED_BODY}" | jq -r '.uploadUrl')
+PRESIGNED_URL=$(echo "${PRESIGNED_BODY}" | jq -r '.presignedUrl')
 VIDEO_ID=$(echo "${PRESIGNED_BODY}" | jq -r '.videoId')
 
-if [ "${UPLOAD_URL}" != "null" ] && [ -n "${UPLOAD_URL}" ]; then
+if [ "${PRESIGNED_URL}" != "null" ] && [ -n "${PRESIGNED_URL}" ] && [ "${HTTP_CODE}" = "200" ]; then
     echo -e "${GREEN}✅ Presigned URL generated${NC}"
     echo -e "${BLUE}Video ID: ${VIDEO_ID}${NC}"
 else
@@ -157,7 +157,7 @@ sleep 1
 echo -e "${YELLOW}5️⃣  Testing Video Upload to S3...${NC}"
 # Create a small test video file (1KB with random data)
 
-TEST_VIDEO_FILE="test-videos/nine_eleven.mp4"
+TEST_VIDEO_FILE="test-videos/shoot2.mp4"
 
 if [ ! -f "${TEST_VIDEO_FILE}" ]; then
     echo -e "${RED}❌ Test video not found: ${TEST_VIDEO_FILE}${NC}"
@@ -169,7 +169,7 @@ fi
 echo -e "${BLUE}Using test video file: ${TEST_VIDEO_FILE}${NC}"
 echo -e "${BLUE}Uploading to S3...${NC}"
 
-UPLOAD_RESPONSE=$(curl -s -X PUT "${UPLOAD_URL}" \
+UPLOAD_RESPONSE=$(curl -s -X PUT "${PRESIGNED_URL}" \
     -H "Content-Type: video/mp4" \
     --data-binary "@${TEST_VIDEO_FILE}" \
     -w "\nHTTP_CODE:%{http_code}")

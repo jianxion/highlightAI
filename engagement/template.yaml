@@ -358,6 +358,10 @@ Resources:
                     - arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}
                     - TableName: 
                         Fn::ImportValue: !Sub ${AuthStackName}-VideosTable
+                  - !Sub 
+                    - arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}/index/*
+                    - TableName: 
+                        Fn::ImportValue: !Sub ${AuthStackName}-VideosTable
                   - !Sub ${LikesTable.Arn}
                   - !Sub ${CommentsTable.Arn}
                   - !Sub ${ViewsTable.Arn}
@@ -400,6 +404,30 @@ Resources:
         {
           "version": "2017-02-28",
           "operation": "Scan",
+          "limit": 100
+        }
+      ResponseMappingTemplate: |
+        $util.toJson($ctx.result.items)
+
+  GetUserVideosResolver:
+    Type: AWS::AppSync::Resolver
+    Properties:
+      ApiId: !GetAtt AppSyncApi.ApiId
+      TypeName: Query
+      FieldName: getUserVideos
+      DataSourceName: !GetAtt VideosDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Query",
+          "index": "UserVideosIndex",
+          "query": {
+            "expression": "userId = :userId",
+            "expressionValues": {
+              ":userId": $util.dynamodb.toDynamoDBJson($ctx.args.userId)
+            }
+          },
+          "scanIndexForward": false,
           "limit": 100
         }
       ResponseMappingTemplate: |
