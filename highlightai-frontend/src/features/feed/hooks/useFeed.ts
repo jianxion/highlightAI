@@ -6,15 +6,17 @@ import { dbg, dbgError } from "../../../shared/utils/debug";
 export type FeedVideo = {
   videoId: string;
   filename: string;
-  s3Key?: string;  // ✅ Added s3Key
+  s3Key?: string;
   status: string;
   createdAt?: number;
+  userEmail?: string;  
+  userId?: string;    
   likeCount: number;
   commentCount: number;
   viewCount: number;
 };
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 20;
 
 /**
  * Feed data hook
@@ -27,7 +29,7 @@ export function useFeed() {
 
   const { data, loading, error, refetch } = useQuery(LIST_VIDEOS, {
     variables: { limit },
-    fetchPolicy: "cache-and-network",
+    fetchPolicy: "network-only",
   });
 
   useEffect(() => {

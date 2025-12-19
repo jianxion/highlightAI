@@ -2,9 +2,6 @@ import { gql } from "@apollo/client";
 
 /**
  * Fetch feed videos
- * NOTE:
- * - Schema does NOT support cursor pagination yet
- * - We paginate by increasing `limit`
  */
 export const LIST_VIDEOS = gql`
   query ListVideos($limit: Int!) {
@@ -14,6 +11,8 @@ export const LIST_VIDEOS = gql`
       s3Key
       status
       createdAt
+      userEmail
+      userId
       likeCount
       commentCount
       viewCount
@@ -50,6 +49,35 @@ export const RECORD_VIEW = gql`
       likeCount
       commentCount
       viewCount
+    }
+  }
+`;
+
+/**
+ * Comment mutations and queries
+ */
+export const ADD_COMMENT = gql`
+  mutation AddComment($videoId: ID!, $content: String!) {
+    addComment(videoId: $videoId, content: $content) {
+      commentId
+      videoId
+      userId
+      userEmail
+      content
+      createdAt
+    }
+  }
+`;
+
+export const GET_COMMENTS = gql`
+  query GetVideoComments($videoId: ID!) {
+    getVideoComments(videoId: $videoId) {
+      commentId
+      videoId
+      userId
+      userEmail
+      content
+      createdAt
     }
   }
 `;
