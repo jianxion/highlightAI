@@ -1,0 +1,39 @@
+import { util } from '@aws-appsync/utils';
+
+/**
+ * Scan DynamoDB table to get all videos
+ * @param {import('@aws-appsync/utils').Context} ctx the context
+ * @returns {*} the request
+ */
+export function request(ctx) {
+  const { limit = 10 } = ctx.arguments;
+  
+  return {
+    operation: 'Scan',
+    limit: limit,
+    // Optional: Add filter to only return UPLOADED videos
+    filter: {
+      expression: '#status = :status',
+      expressionNames: {
+        '#status': 'status'
+      },
+      expressionValues: {
+        ':status': util.dynamodb.toDynamoDB('UPLOADED')
+      }
+    }
+  };
+}
+
+/**
+ * Returns the resolver result
+ * @param {import('@aws-appsync/utils').Context} ctx the context
+ * @returns {*} the result
+ */
+export function response(ctx) {
+  if (ctx.error) {
+    util.error(ctx.error.message, ctx.error.type);
+  }
+  
+  // Return the items from the scan
+  return ctx.result.items || [];
+}
