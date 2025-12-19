@@ -491,6 +491,7 @@ def create_video_description_with_overlay(title_overlay_key):
     return video_desc
 
 
+
 def create_mediaconvert_job(video_id, bucket, key, key_moments, subtitle_key, output_filename, title_overlay_key=None):
     input_clippings = []
     for m in key_moments:
@@ -776,6 +777,7 @@ def summarize_context(video_s3_key, transcript_data):
         response = requests.post(url, json=payload, headers={'Content-Type': 'application/json'})
         result = response.json()
         
+        summary = result['candidates'][0]['content']['parts'][0]['text'].strip()
         
         # Clean quotes
         return summary.replace('"', '').replace("'", "").replace("\n", " ")
