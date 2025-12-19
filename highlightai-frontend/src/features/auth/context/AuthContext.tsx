@@ -10,6 +10,7 @@ import {
 interface AuthUser {
   email: string;
   name?: string;
+  userId: string; // Cognito sub
 }
 
 interface AuthState {
@@ -28,6 +29,21 @@ interface AuthContextValue extends AuthState {
   }) => void;
   logout: () => void;
   isAuthenticated: boolean;
+}
+
+/**
+ * Decode JWT token to extract userId (sub claim)
+ * JWT format: header.payload.signature
+ */
+function decodeJWT(token: string): { sub?: string; email?: string } {
+  try {
+    const payloadBase64 = token.split(".")[1];
+    const payloadJson = atob(payloadBase64);
+    return JSON.parse(payloadJson);
+  } catch (err) {
+    console.error("Failed to decode JWT:", err);
+    return {};
+  }
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -83,11 +99,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email,
     });
 
+    // Decode idToken to get userId (Cognito sub)
+    const decoded = decodeJWT(idToken);
+    const userId = decoded.sub || "";
+
+    if (!userId) {
+      console.error("Failed to extract userId from idToken!");
+    }
+
+    console.log("Extracted userId from JWT:", userId);
+
     const newState: AuthState = {
       accessToken,
       refreshToken,
       idToken,
-      user: { email },
+      user: { email, userId },
     };
 
     setState(newState);
