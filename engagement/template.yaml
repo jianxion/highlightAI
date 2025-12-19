@@ -15,61 +15,34 @@ Parameters:
     Description: Name of the auth-upload stack for imports
 
 Resources:
-  # S3 BUCKET FOR PROCESSED/EDITED VIDEOS
-  ProcessedVideosBucket:
-    Type: AWS::S3::Bucket
+  # CLOUDFRONT DISTRIBUTION FOR FRONTEND HTTPS
+  FrontendCloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
     Properties:
-      BucketName: !Sub highlightai-processed-videos-${AWS::AccountId}
-      CorsConfiguration:
-        CorsRules:
-          - AllowedOrigins:
-              - '*'
-            AllowedMethods:
-              - GET
-              - HEAD
-            AllowedHeaders:
-              - '*'
-            MaxAge: 3600
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      NotificationConfiguration:
-        QueueConfigurations:
-          - Event: s3:ObjectCreated:*
-            Queue: !GetAtt ProcessedVideoQueue.Arn
-            Filter:
-              S3Key:
-                Rules:
-                  - Name: prefix
-                    Value: processed/
-
-  # SQS QUEUE FOR PROCESSED VIDEO NOTIFICATIONS
-  ProcessedVideoQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: highlightai-processed-video-queue
-      VisibilityTimeout: 60
-      MessageRetentionPeriod: 86400
-
-  ProcessedVideoQueuePolicy:
-    Type: AWS::SQS::QueuePolicy
-    Properties:
-      Queues:
-        - !Ref ProcessedVideoQueue
-      PolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: s3.amazonaws.com
-            Action:
-              - SQS:SendMessage
-            Resource: !GetAtt ProcessedVideoQueue.Arn
-            Condition:
-              StringLike:
-                aws:SourceArn: !Sub arn:aws:s3:::highlightai-processed-videos-${AWS::AccountId}
-
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        Origins:
+          - Id: S3WebsiteOrigin
+            DomainName: !Sub "highlightai-frontend-298156079577.s3-website-${AWS::Region}.amazonaws.com"
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+        DefaultCacheBehavior:
+          TargetOriginId: S3WebsiteOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+          CachedMethods:
+            - GET
+            - HEAD
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
   # DYNAMODB TABLES FOR ENGAGEMENT
   LikesTable:
     Type: AWS::DynamoDB::Table
@@ -517,6 +490,9 @@ Resources:
         $util.toJson($ctx.result)
 
 Outputs:
+  FrontendCloudFrontDomain:
+    Description: HTTPS domain for your frontend
+    Value: !GetAtt FrontendCloudFrontDistribution.DomainName
   AppSyncApiUrl:
     Description: AppSync GraphQL API URL
     Value: !GetAtt AppSyncApi.GraphQLUrl

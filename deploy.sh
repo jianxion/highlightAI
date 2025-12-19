@@ -168,6 +168,28 @@ fi
 cd ..
 echo ""
 
+# Upload frontend to S3
+print_step "Step 5/6: Uploading frontend to S3..."
+BUCKET_NAME="highlightai-frontend-298156079577"
+aws s3 sync highlightai-frontend/dist/ s3://$BUCKET_NAME/ --delete --cache-control "public, max-age=31536000, immutable" --exclude "index.html"
+aws s3 cp highlightai-frontend/dist/index.html s3://$BUCKET_NAME/ --cache-control "no-cache, no-store, must-revalidate"
+print_success "Frontend uploaded to S3 bucket: $BUCKET_NAME"
+
+# Deploy CloudFront distribution
+print_step "Step 6/6: Deploying CloudFront distribution..."
+aws cloudformation deploy \
+    --stack-name $ENGAGEMENT_STACK \
+    --template-file engagement/template.yaml \
+    --capabilities CAPABILITY_IAM
+
+# Output CloudFront domain
+CF_DOMAIN=$(aws cloudformation describe-stacks --stack-name $ENGAGEMENT_STACK --query "Stacks[0].Outputs[?OutputKey=='FrontendCloudFrontDomain'].OutputValue" --output text)
+if [ -n "$CF_DOMAIN" ]; then
+    print_success "Your HTTPS frontend is available at: https://$CF_DOMAIN"
+else
+    print_warning "CloudFront deployment complete. Check AWS Console for domain name."
+fi
+
 # Print summary
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 print_success "DEPLOYMENT COMPLETE!"
