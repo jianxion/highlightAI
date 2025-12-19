@@ -44,29 +44,34 @@ videos_table = dynamodb.Table(VIDEOS_TABLE_NAME)
 
 def consolidation_handler(event, context):
     """
-    Triggered by CloudWatch Events when analysis jobs complete
+    Triggered by CloudWatch Events when Transcribe job completes
     Merges results and creates MediaConvert job
     """
     print(f"🔀 Consolidation handler triggered")
+    print(f"Event: {json.dumps(event)}")
     
     try:
-        # Expected S3 Event: Records[0].s3.object.key
-        if 'Records' not in event:
-            print(f"⚠️  Not an S3 event, ignoring: {event}")
-            return
-            
-        record = event['Records'][0]
-        key = record['s3']['object']['key']
-        # Key format: transcripts/{videoId}.json
+        # CloudWatch Event format for Transcribe completion
+        if 'detail' not in event or 'detail-type' not in event:
+            print(f"⚠️  Not a CloudWatch event, ignoring")
+            return {'statusCode': 400, 'body': 'Invalid event format'}
         
-        filename = key.split('/')[-1]
-        video_id = filename.replace('.json', '')
+        detail = event['detail']
+        transcribe_job_name = detail.get('TranscriptionJobName')
+        job_status = detail.get('TranscriptionJobStatus')
+        
+        if job_status != 'COMPLETED':
+            print(f"⚠️  Transcribe job not completed: {job_status}")
+            return {'statusCode': 200, 'body': 'Job not completed yet'}
+        
+        # Extract videoId from job name (format: transcribe-{videoId})
+        if not transcribe_job_name or not transcribe_job_name.startswith('transcribe-'):
+            raise ValueError(f"Invalid transcribe job name: {transcribe_job_name}")
+        
+        video_id = transcribe_job_name.replace('transcribe-', '')
         
         if not video_id:
-            raise ValueError(f"Could not extract videoId from key: {key}")
-        
-        if not video_id:
-            raise ValueError(f"No videoId found in event: {json.dumps(detail)}")
+            raise ValueError(f"No videoId found in job name: {transcribe_job_name}")
         
         print(f"📊 Consolidating results for {video_id}")
         
