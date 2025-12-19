@@ -53,19 +53,17 @@ def lambda_handler(event, context):
     """
     SQS-triggered handler to start async analysis jobs
     
-    Event structure:
+    Event structure from UploadCompleteFunction:
     {
         'Records': [
             {
                 'body': {
-                    'Records': [
-                        {
-                            's3': {
-                                'bucket': {'name': 'bucket-name'},
-                                'object': {'key': 'path/to/video.mp4'}
-                            }
-                        }
-                    ]
+                    'videoId': 'abc123',
+                    'bucket': 'bucket-name',
+                    's3Key': 'videos/userId_videoId_timestamp_file.mp4',
+                    'fileSize': 12345,
+                    'status': 'UPLOADED',
+                    'timestamp': 1234567890
                 }
             }
         ]
@@ -79,21 +77,18 @@ def lambda_handler(event, context):
         
         for record in event['Records']:
             try:
-                # Parse SQS message containing S3 event
+                # Parse SQS message from UploadCompleteFunction
                 message_body = json.loads(record['body'])
                 
-                if 'Records' not in message_body:
-                    print(f"⚠️  No Records in message body: {message_body}")
+                # Extract video details from custom message format
+                video_id = message_body.get('videoId')
+                bucket = message_body.get('bucket')
+                key = message_body.get('s3Key')
+                file_size = message_body.get('fileSize', 0)
+                
+                if not video_id or not bucket or not key:
+                    print(f"⚠️  Missing required fields in message: {message_body}")
                     continue
-                
-                s3_event = message_body['Records'][0]
-                bucket = s3_event['s3']['bucket']['name']
-                key = s3_event['s3']['object']['key']
-                file_size = s3_event['s3']['object'].get('size', 0)
-                
-                # Extract video ID from S3 key
-                # Expected format: videos/<userId>_<videoId>_<timestamp>_<filename>
-                video_id = extract_video_id(key)
                 
                 print(f"📹 Processing video: {video_id}")
                 print(f"   S3 Location: s3://{bucket}/{key}")
@@ -685,19 +680,17 @@ def update_video_status(video_id, data):
 if __name__ == '__main__':
     """Local testing"""
     
-    # Mock SQS event
+    # Mock SQS event with UploadCompleteFunction message format
     test_event = {
         'Records': [
             {
                 'body': json.dumps({
-                    'Records': [
-                        {
-                            's3': {
-                                'bucket': {'name': 'raw-videos-bucket'},
-                                'object': {'key': 'videos/user123_video456_1702704000_recording.mp4'}
-                            }
-                        }
-                    ]
+                    'videoId': 'video456',
+                    'bucket': 'raw-videos-bucket',
+                    's3Key': 'videos/user123_video456_1702704000_recording.mp4',
+                    'fileSize': 10485760,
+                    'status': 'UPLOADED',
+                    'timestamp': 1702704000
                 })
             }
         ]

@@ -94,7 +94,7 @@ Resources:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: highlightai-video-processing-queue
-      VisibilityTimeout: 900  # 15 minutes for video processing
+      VisibilityTimeout: 660  # 11 minutes (Lambda timeout 600s + buffer)
       MessageRetentionPeriod: 345600  # 4 days
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt VideoProcessingDLQ.Arn
