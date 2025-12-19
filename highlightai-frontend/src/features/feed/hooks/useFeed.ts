@@ -6,7 +6,12 @@ import { dbg, dbgError } from "../../../shared/utils/debug";
 export type FeedVideo = {
   videoId: string;
   filename: string;
-  s3Key?: string;  // ✅ Added s3Key
+  s3Key?: string;
+  bucket?: string;
+  processedS3Key?: string;
+  processedBucket?: string;
+  contentType?: string;
+  fileSize?: number;
   status: string;
   createdAt?: number;
   likeCount: number;
@@ -39,10 +44,18 @@ export function useFeed() {
 
     dbg("FEED", "Raw listVideos payload", raw);
 
-    return raw.map((v: any) => ({
+    // Filter to show only COMPLETED videos
+    const completedVideos = raw.filter((v: any) => v.status === "COMPLETED");
+
+    return completedVideos.map((v: any) => ({
       videoId: String(v.videoId),
       filename: String(v.filename),
-      s3Key: v.s3Key,  // ✅ Include s3Key
+      s3Key: v.s3Key,
+      bucket: v.bucket,
+      processedS3Key: v.processedS3Key,
+      processedBucket: v.processedBucket,
+      contentType: v.contentType,
+      fileSize: v.fileSize,
       status: String(v.status),
       createdAt: v.createdAt,
       likeCount: Number(v.likeCount ?? 0),

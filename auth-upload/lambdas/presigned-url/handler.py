@@ -80,46 +80,45 @@ def lambda_handler(event, context):
             'filename': filename,
             's3Key': s3_key,
             'bucket': RAW_VIDEOS_BUCKET,
-            'fileSize': file_size,
             'contentType': content_type,
+            'fileSize': file_size,
+            'uploadedSize': 0,
             'status': 'UPLOADING',
             'createdAt': timestamp,
-            'updatedAt': timestamp
+            'updatedAt': timestamp,
+            # Initialize engagement counts
+            'likeCount': 0,
+            'commentCount': 0,
+            'viewCount': 0
         }
         
         table.put_item(Item=video_metadata)
         
         return response(200, {
             'videoId': video_id,
-            'uploadUrl': presigned_url,
+            'presignedUrl': presigned_url,
             's3Key': s3_key,
-            'expiresIn': 900,
-            'message': 'Upload URL generated successfully'
+            'bucket': RAW_VIDEOS_BUCKET,
+            'expiresIn': 900
         })
         
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        error_message = e.response['Error']['Message']
-        print(f"AWS error: {error_code} - {error_message}")
-        return response(500, {'error': 'Failed to generate upload URL'})
-        
-    except KeyError as e:
-        print(f"Missing authorization: {str(e)}")
-        return response(401, {'error': 'Unauthorized - missing user information'})
-        
+        print(f"DynamoDB Error: {str(e)}")
+        return response(500, {'error': 'Database operation failed'})
     except Exception as e:
-        print(f"Unexpected error: {str(e)}")
+        print(f"Unexpected Error: {str(e)}")
         return response(500, {'error': 'Internal server error'})
 
+
 def response(status_code, body):
-    """Helper function to format API Gateway response"""
+    """Helper to generate API Gateway response"""
     return {
         'statusCode': status_code,
         'headers': {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-            'Access-Control-Allow-Methods': 'POST,OPTIONS'
+            'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+            'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
         },
         'body': json.dumps(body)
     }

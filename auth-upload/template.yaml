@@ -34,16 +34,24 @@ Resources:
                 Rules:
                   - Name: prefix
                     Value: videos/
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
       LifecycleConfiguration:
         Rules:
           - Id: DeleteOldRawVideos
             Status: Enabled
             ExpirationInDays: 7
+
+  # BUCKET POLICY: Allow public read access for video playback
+  RawVideosBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref RawVideosBucket
+      PolicyDocument:
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub '${RawVideosBucket.Arn}/*'
 
   # S3 BUCKET FOR EDITED VIDEO OUTPUTS (Debika's contribution)
   EditedVideosBucket:
@@ -61,16 +69,24 @@ Resources:
             AllowedHeaders:
               - '*'
             MaxAge: 3000
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
       LifecycleConfiguration:
         Rules:
           - Id: DeleteOldEditedVideos
             Status: Enabled
             ExpirationInDays: 7
+
+  # BUCKET POLICY: Allow public read access for edited videos
+  EditedVideosBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref EditedVideosBucket
+      PolicyDocument:
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub '${EditedVideosBucket.Arn}/*'
 
   # SQS QUEUE FOR UPLOAD NOTIFICATIONS
   UploadQueue:
@@ -550,6 +566,46 @@ Resources:
               detail:
                 TranscriptionJobStatus:
                   - COMPLETED
+
+  # LAMBDA: MEDIACONVERT COMPLETION HANDLER
+  MediaConvertCompleteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: highlightai-mediaconvert-complete
+      CodeUri: lambdas/mediaconvert-complete/
+      Handler: handler.lambda_handler
+      Runtime: python3.11
+      Timeout: 60
+      MemorySize: 256
+      Environment:
+        Variables:
+          VIDEOS_TABLE: !Ref VideosTable
+          EDITED_VIDEOS_BUCKET: !Ref EditedVideosBucket
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:UpdateItem
+                - dynamodb:GetItem
+              Resource: !GetAtt VideosTable.Arn
+            - Effect: Allow
+              Action:
+                - mediaconvert:GetJob
+              Resource: '*'
+      Events:
+        MediaConvertComplete:
+          Type: CloudWatchEvent
+          Properties:
+            Pattern:
+              source:
+                - aws.mediaconvert
+              detail-type:
+                - MediaConvert Job State Change
+              detail:
+                status:
+                  - COMPLETE
+                  - ERROR
 
 Outputs:
   ApiUrl:

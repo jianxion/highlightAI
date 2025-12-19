@@ -35,14 +35,20 @@ export default function VideoCard({ video }: { video: FeedVideo }) {
       return video.filename;
     }
     
-    // Build S3 URL from s3Key if available
+    // Prefer processed/edited video if available
+    if (video.processedS3Key && video.processedBucket) {
+      const region = 'us-east-1';
+      return `https://${video.processedBucket}.s3.${region}.amazonaws.com/${video.processedS3Key}`;
+    }
+    
+    // Fallback to raw video if processing not complete
     if (video.s3Key) {
-      const bucket = 'highlightai-raw-videos-642570498207';
+      const bucket = video.bucket || import.meta.env.VITE_RAW_VIDEOS_BUCKET;
       const region = 'us-east-1';
       return `https://${bucket}.s3.${region}.amazonaws.com/${video.s3Key}`;
     }
     
-    // Fallback: return filename as-is
+    // Final fallback: return filename as-is
     return video.filename || '';
   };
 
