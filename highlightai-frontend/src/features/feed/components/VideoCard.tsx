@@ -16,7 +16,7 @@ export default function VideoCard({ video }: { video: FeedVideo }) {
 
   // 🔥 Add analytics tracking (disabled temporarily due to CORS)
   // const analytics = useVideoAnalytics(video.videoId, videoRef.current);
-  
+
   const [isMuted, setIsMuted] = useState(true);
   const [liked, setLiked] = useState(false);
   const [stats, setStats] = useState({
@@ -29,21 +29,28 @@ export default function VideoCard({ video }: { video: FeedVideo }) {
   const [unlikeVideo] = useMutation(UNLIKE_VIDEO);
   const [recordView] = useMutation(RECORD_VIEW);
 
-  // ✅ Helper function to get proper S3 URL
+  // ✅ Helper function to get proper video URL (prioritize processed/edited video)
   const getVideoUrl = (video: FeedVideo) => {
-    // If filename is already a full URL, use it
+    // Priority 1: processedS3Key if available (uses processed videos bucket)
+    if (video.processedS3Key) {
+      // Hardcoded bucket name for processed videos until schema is updated
+      const bucket = 'highlightai-edited-videos-642570498207';
+      const region = 'us-east-1';
+      return `https://${bucket}.s3.${region}.amazonaws.com/${video.processedS3Key}`;
+    }
+
+    // Priority 2: filename if it's already a full URL
     if (video.filename?.startsWith('http')) {
       return video.filename;
     }
-    
-    // Build S3 URL from s3Key if available
+
+    // Fallback: raw video
     if (video.s3Key) {
-      const bucket = 'highlightai-raw-videos-642570498207';
+      const bucket = video.bucket || 'highlightai-raw-videos-642570498207';
       const region = 'us-east-1';
       return `https://${bucket}.s3.${region}.amazonaws.com/${video.s3Key}`;
     }
-    
-    // Fallback: return filename as-is
+
     return video.filename || '';
   };
 
@@ -73,7 +80,7 @@ export default function VideoCard({ video }: { video: FeedVideo }) {
     const observer = new IntersectionObserver(
       async ([entry]) => {
         if (entry.isIntersecting) {
-          el.play().catch(() => {});
+          el.play().catch(() => { });
           if (!viewedRef.current) {
             viewedRef.current = true;
             try {
@@ -126,7 +133,7 @@ export default function VideoCard({ video }: { video: FeedVideo }) {
         className="w-full aspect-[9/16] object-cover cursor-pointer"
         onClick={() => setIsMuted(!isMuted)}
       />
-      
+
       {/* Mute indicator */}
       {isMuted && (
         <div className="absolute top-4 right-4 bg-black/70 text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-1 pointer-events-none">

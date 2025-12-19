@@ -14,8 +14,6 @@ export const LIST_VIDEOS = gql`
       s3Key
       bucket
       processedS3Key
-      processedBucket
-      contentType
       fileSize
       status
       createdAt

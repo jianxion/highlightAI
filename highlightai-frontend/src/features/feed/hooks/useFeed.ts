@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useQuery } from "@apollo/client";
 import { LIST_VIDEOS } from "../graphql/operations";
 import { dbg, dbgError } from "../../../shared/utils/debug";
+import { useAuth } from "../../auth/hooks/useAuth";
 
 export type FeedVideo = {
   videoId: string;
@@ -9,8 +10,6 @@ export type FeedVideo = {
   s3Key?: string;
   bucket?: string;
   processedS3Key?: string;
-  processedBucket?: string;
-  contentType?: string;
   fileSize?: number;
   status: string;
   createdAt?: number;
@@ -26,13 +25,16 @@ const PAGE_SIZE = 5;
  * - Progressive pagination (limit-based)
  * - Defensive normalization
  * - Debug logging at every step
+ * - Skips query when not authenticated
  */
 export function useFeed() {
+  const { isAuthenticated } = useAuth();
   const [limit, setLimit] = useState(PAGE_SIZE);
 
   const { data, loading, error, refetch } = useQuery(LIST_VIDEOS, {
     variables: { limit },
     fetchPolicy: "cache-and-network",
+    skip: !isAuthenticated, // Don't fetch if not logged in
   });
 
   useEffect(() => {
@@ -44,8 +46,8 @@ export function useFeed() {
 
     dbg("FEED", "Raw listVideos payload", raw);
 
-    // Filter to show only COMPLETED videos
-    const completedVideos = raw.filter((v: any) => v.status === "COMPLETED");
+    // Filter to show only EDITED videos (processed by MediaConvert)
+    const completedVideos = raw.filter((v: any) => v.status === "EDITED");
 
     return completedVideos.map((v: any) => ({
       videoId: String(v.videoId),
@@ -53,8 +55,6 @@ export function useFeed() {
       s3Key: v.s3Key,
       bucket: v.bucket,
       processedS3Key: v.processedS3Key,
-      processedBucket: v.processedBucket,
-      contentType: v.contentType,
       fileSize: v.fileSize,
       status: String(v.status),
       createdAt: v.createdAt,

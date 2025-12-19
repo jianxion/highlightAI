@@ -10,7 +10,7 @@ import { useSignup } from "../hooks/useSignup";
 const signUpSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Enter a valid email"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
 type SignUpForm = z.infer<typeof signUpSchema>;
@@ -32,9 +32,12 @@ export default function SignUpPage() {
     try {
       await handleSignup(data.name, data.email, data.password);
     } catch (err: any) {
+      console.error("Signup error:", err);
+      console.error("Response data:", err?.response?.data);
       setServerError(
+        err?.response?.data?.error ||
         err?.response?.data?.message ||
-          "Failed to create account. Please try again."
+        "Failed to create account. Please try again."
       );
     }
   };
