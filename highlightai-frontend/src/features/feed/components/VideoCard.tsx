@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useSubscription } from "@apollo/client";
-import { useVideoAnalytics } from "../../analytics/hooks/useVideoAnalytics";
+// import { useVideoAnalytics } from "../../analytics/hooks/useVideoAnalytics";
 import {
   LIKE_VIDEO,
   UNLIKE_VIDEO,
@@ -14,9 +14,10 @@ export default function VideoCard({ video }: { video: FeedVideo }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const viewedRef = useRef(false);
 
-  // 🔥 Add analytics tracking
-  const analytics = useVideoAnalytics(video.videoId, videoRef.current);
-
+  // 🔥 Add analytics tracking (disabled temporarily due to CORS)
+  // const analytics = useVideoAnalytics(video.videoId, videoRef.current);
+  
+  const [isMuted, setIsMuted] = useState(true);
   const [liked, setLiked] = useState(false);
   const [stats, setStats] = useState({
     likeCount: video.likeCount,
@@ -35,20 +36,14 @@ export default function VideoCard({ video }: { video: FeedVideo }) {
       return video.filename;
     }
     
-    // Prefer processed/edited video if available
-    if (video.processedS3Key && video.processedBucket) {
-      const region = 'us-east-1';
-      return `https://${video.processedBucket}.s3.${region}.amazonaws.com/${video.processedS3Key}`;
-    }
-    
-    // Fallback to raw video if processing not complete
+    // Build S3 URL from s3Key if available
     if (video.s3Key) {
-      const bucket = video.bucket || import.meta.env.VITE_RAW_VIDEOS_BUCKET;
+      const bucket = 'highlightai-raw-videos-642570498207';
       const region = 'us-east-1';
       return `https://${bucket}.s3.${region}.amazonaws.com/${video.s3Key}`;
     }
     
-    // Final fallback: return filename as-is
+    // Fallback: return filename as-is
     return video.filename || '';
   };
 
@@ -121,26 +116,36 @@ export default function VideoCard({ video }: { video: FeedVideo }) {
   }
 
   return (
-    <div className="rounded-3xl overflow-hidden bg-black border border-white/10">
+    <div className="rounded-3xl overflow-hidden bg-black border border-white/10 relative">
       <video
         ref={videoRef}
         src={getVideoUrl(video)}
-        muted
+        muted={isMuted}
         loop
         playsInline
-        className="w-full aspect-[9/16] object-cover"
+        className="w-full aspect-[9/16] object-cover cursor-pointer"
+        onClick={() => setIsMuted(!isMuted)}
       />
+      
+      {/* Mute indicator */}
+      {isMuted && (
+        <div className="absolute top-4 right-4 bg-black/70 text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-1 pointer-events-none">
+          <span>🔇</span>
+          <span>Tap to unmute</span>
+        </div>
+      )}
 
       <div className="p-3 flex justify-between items-center text-white text-sm">
         <div>
           <div className="font-semibold">{video.videoId}</div>
           <div className="text-xs text-slate-400">{video.status}</div>
-          {/* 🔥 Show analytics data */}
+          {/* 🔥 Analytics disabled temporarily due to CORS
           <div className="text-xs text-slate-500 mt-1">
             Session: {analytics.sessionId.substring(0, 8)}... | 
             Watches: {analytics.watchCount} | 
             Pauses: {analytics.pauseCount}
           </div>
+          */}
         </div>
 
         <div className="flex gap-3 items-center">

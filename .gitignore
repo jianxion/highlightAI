@@ -16,3 +16,6 @@ Thumbs.db
 
 # Documentation drafts
 *.docx
+
+# Generated test files
+title_image_*.png

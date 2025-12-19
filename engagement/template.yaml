@@ -15,6 +15,64 @@ Parameters:
     Description: Name of the auth-upload stack for imports
 
 Resources:
+<<<<<<< HEAD
+=======
+  # S3 BUCKET FOR PROCESSED/EDITED VIDEOS
+  ProcessedVideosBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub highlightai-processed-videos-${AWS::AccountId}
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedMethods:
+              - GET
+              - HEAD
+            AllowedHeaders:
+              - '*'
+            MaxAge: 3600
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !GetAtt ProcessedVideoQueue.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: processed/
+
+  # SQS QUEUE FOR PROCESSED VIDEO NOTIFICATIONS
+  ProcessedVideoQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: highlightai-processed-video-queue
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 86400
+
+  ProcessedVideoQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ProcessedVideoQueue
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action:
+              - SQS:SendMessage
+            Resource: !GetAtt ProcessedVideoQueue.Arn
+            Condition:
+              StringLike:
+                aws:SourceArn: !Sub arn:aws:s3:::highlightai-processed-videos-${AWS::AccountId}
+
+>>>>>>> monish-engagement
   # DYNAMODB TABLES FOR ENGAGEMENT
   LikesTable:
     Type: AWS::DynamoDB::Table
@@ -137,12 +195,18 @@ Resources:
           userEmail: String
           filename: String!
           s3Key: String!
+<<<<<<< HEAD
           bucket: String!
           processedS3Key: String
           processedBucket: String
           contentType: String
           fileSize: Int
           uploadedSize: Int
+=======
+          processedS3Key: String
+          bucket: String!
+          fileSize: Int!
+>>>>>>> monish-engagement
           status: String!
           createdAt: AWSTimestamp!
           updatedAt: AWSTimestamp!
@@ -335,6 +399,7 @@ Resources:
       ResponseMappingTemplate: |
         $util.toJson($ctx.result)
 
+<<<<<<< HEAD
   ListVideosResolver:
     Type: AWS::AppSync::Resolver
     Properties:
@@ -351,6 +416,8 @@ Resources:
       ResponseMappingTemplate: |
         $util.toJson($ctx.result.items)
 
+=======
+>>>>>>> monish-engagement
   LikeVideoResolver:
     Type: AWS::AppSync::Resolver
     Properties:
@@ -447,6 +514,15 @@ Outputs:
     Export:
       Name: !Sub ${AWS::StackName}-AppSyncApiId
 
+<<<<<<< HEAD
+=======
+  ProcessedVideosBucketName:
+    Description: S3 Bucket for processed/edited videos
+    Value: !Ref ProcessedVideosBucket
+    Export:
+      Name: !Sub ${AWS::StackName}-ProcessedVideosBucket
+
+>>>>>>> monish-engagement
   EngagementQueueUrl:
     Description: SQS Queue URL for engagement actions
     Value: !Ref EngagementQueue

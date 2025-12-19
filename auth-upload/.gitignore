@@ -5,3 +5,16 @@ __pycache__/
 .DS_Store
 *.log
 .git
+
+# Test videos and debug files
+test-videos/
+*.mp4
+*.MP4
+*.png
+*.zip
+*.json
+debug.txt
+transcript.json
+inspect_png.py
+verify_gemini_local.py
+recent_video.mp4
