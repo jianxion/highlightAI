@@ -155,9 +155,9 @@ sleep 1
 
 # 5. Test Video Upload to S3
 echo -e "${YELLOW}5️⃣  Testing Video Upload to S3...${NC}"
+# Create a small test video file (1KB with random data)
 
-# Use real test video for AI processing (Debika's contribution)
-TEST_VIDEO_FILE="test-videos/shooting.mp4"
+TEST_VIDEO_FILE="test-videos/nine_eleven.mp4"
 
 if [ ! -f "${TEST_VIDEO_FILE}" ]; then
     echo -e "${RED}❌ Test video not found: ${TEST_VIDEO_FILE}${NC}"

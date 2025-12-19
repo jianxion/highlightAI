@@ -781,6 +781,7 @@ def summarize_context(video_s3_key, transcript_data):
         response = requests.post(url, json=payload, headers={'Content-Type': 'application/json'})
         result = response.json()
         
+        summary = result['candidates'][0]['content']['parts'][0]['text'].strip()
         
         # Clean quotes
         return summary.replace('"', '').replace("'", "").replace("\n", " ")
