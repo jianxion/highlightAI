@@ -46,8 +46,9 @@ export default function ProfileVideoGrid({
         >
           <video
             src={getVideoUrl(video)}
-            muted
             className="h-full w-full object-cover transition group-hover:scale-105"
+            onMouseEnter={(e) => e.currentTarget.play()}
+            onMouseLeave={(e) => e.currentTarget.pause()}
           />
           
           {/* Hover overlay with stats */}

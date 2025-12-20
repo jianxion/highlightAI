@@ -76,12 +76,7 @@ const httpLink = new HttpLink({
     // Attach JWT at request time (so it works after login without refresh).
     const jwt = getJwt();
     const headers = new Headers(options?.headers || {});
-    if (jwt) {
-      headers.set("Authorization", jwt);
-      // AppSync with Cognito also expects the host header
-      const url = new URL(import.meta.env.VITE_APPSYNC_HTTP_URL);
-      headers.set("host", url.host);
-    }
+    if (jwt) headers.set("Authorization", jwt);
 
     dbg("GRAPHQL", "HTTP headers", { Authorization: jwt ? "present" : "missing" });
 

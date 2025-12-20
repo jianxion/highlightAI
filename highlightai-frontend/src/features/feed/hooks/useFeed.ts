@@ -10,16 +10,17 @@ export type FeedVideo = {
   bucket?: string;
   processedS3Key?: string;
   processedBucket?: string;
-  contentType?: string;
   fileSize?: number;
-  status: string;
+  userEmail?: string;
+  userId?: string;
+  status?: string;
   createdAt?: number;
   likeCount: number;
   commentCount: number;
   viewCount: number;
 };
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 20;
 
 /**
  * Feed data hook
@@ -32,7 +33,7 @@ export function useFeed() {
 
   const { data, loading, error, refetch } = useQuery(LIST_VIDEOS, {
     variables: { limit },
-    fetchPolicy: "cache-and-network",
+    fetchPolicy: "network-only",
   });
 
   useEffect(() => {
@@ -44,20 +45,18 @@ export function useFeed() {
 
     dbg("FEED", "Raw listVideos payload", raw);
 
-    // Filter to show only COMPLETED videos
-    const completedVideos = raw.filter((v: any) => v.status === "COMPLETED");
-
-    return completedVideos.map((v: any) => ({
+    return raw.map((v: any) => ({
       videoId: String(v.videoId),
       filename: String(v.filename),
       s3Key: v.s3Key,
       bucket: v.bucket,
       processedS3Key: v.processedS3Key,
       processedBucket: v.processedBucket,
-      contentType: v.contentType,
       fileSize: v.fileSize,
       status: String(v.status),
       createdAt: v.createdAt,
+      userEmail: v.userEmail,
+      userId: v.userId,
       likeCount: Number(v.likeCount ?? 0),
       commentCount: Number(v.commentCount ?? 0),
       viewCount: Number(v.viewCount ?? 0),

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useSubscription } from "@apollo/client";
-import { useVideoAnalytics } from "../../analytics/hooks/useVideoAnalytics";
 import {
   LIKE_VIDEO,
   UNLIKE_VIDEO,
@@ -9,15 +8,16 @@ import {
 } from "../graphql/operations";
 import type { FeedVideo } from "../hooks/useFeed";
 import { dbg, dbgError } from "../../../shared/utils/debug";
+import CommentSection from "./CommentSection";
 
 export default function VideoCard({ video }: { video: FeedVideo }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const viewedRef = useRef(false);
 
-  // 🔥 Add analytics tracking
-  const analytics = useVideoAnalytics(video.videoId, videoRef.current);
-
+  const [isMuted, setIsMuted] = useState(true);
+  const [isPaused, setIsPaused] = useState(false);
   const [liked, setLiked] = useState(false);
+  const [showComments, setShowComments] = useState(false);
   const [stats, setStats] = useState({
     likeCount: video.likeCount,
     commentCount: video.commentCount,
@@ -34,20 +34,14 @@ export default function VideoCard({ video }: { video: FeedVideo }) {
     if (video.filename?.startsWith('http')) {
       return video.filename;
     }
-    
-    // Prefer processed/edited video if available
-    if (video.processedS3Key && video.processedBucket) {
-      const region = 'us-east-1';
-      return `https://${video.processedBucket}.s3.${region}.amazonaws.com/${video.processedS3Key}`;
-    }
-    
-    // Fallback to raw video if processing not complete
+
+    // Use raw video from s3Key
     if (video.s3Key) {
       const bucket = video.bucket || import.meta.env.VITE_RAW_VIDEOS_BUCKET;
       const region = 'us-east-1';
       return `https://${bucket}.s3.${region}.amazonaws.com/${video.s3Key}`;
     }
-    
+
     // Final fallback: return filename as-is
     return video.filename || '';
   };
@@ -78,7 +72,7 @@ export default function VideoCard({ video }: { video: FeedVideo }) {
     const observer = new IntersectionObserver(
       async ([entry]) => {
         if (entry.isIntersecting) {
-          el.play().catch(() => {});
+          el.play().catch(() => { });
           if (!viewedRef.current) {
             viewedRef.current = true;
             try {
@@ -120,37 +114,97 @@ export default function VideoCard({ video }: { video: FeedVideo }) {
     }
   }
 
+  const handleCommentAdded = () => {
+    setStats(prev => ({ ...prev, commentCount: (prev.commentCount || 0) + 1 }));
+  };
+
+  const togglePlayPause = () => {
+    const el = videoRef.current;
+    if (!el) return;
+
+    if (el.paused) {
+      el.play().catch(() => { });
+      setIsPaused(false);
+    } else {
+      el.pause();
+      setIsPaused(true);
+    }
+  };
+
+  const toggleMute = () => {
+    setIsMuted(!isMuted);
+  };
+
   return (
-    <div className="rounded-3xl overflow-hidden bg-black border border-white/10">
+    <div className="rounded-3xl overflow-hidden bg-black border border-white/10 relative">
       <video
         ref={videoRef}
         src={getVideoUrl(video)}
-        muted
+        muted={isMuted}
         loop
         playsInline
-        className="w-full aspect-[9/16] object-cover"
+        controls
+        className="w-full aspect-[9/16] object-cover cursor-pointer"
+        onClick={togglePlayPause}
       />
 
+      {/* Pause indicator overlay */}
+      {isPaused && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="bg-black/50 rounded-full p-4">
+            <span className="text-4xl">▶️</span>
+          </div>
+        </div>
+      )}
+
+      {/* Video controls */}
+      <div className="absolute top-4 right-4 flex gap-2">
+        <button
+          onClick={toggleMute}
+          className="bg-black/70 text-white px-3 py-1.5 rounded-full text-sm flex items-center gap-1 hover:bg-black/90 transition"
+        >
+          <span>{isMuted ? "🔇" : "🔊"}</span>
+        </button>
+        <button
+          onClick={togglePlayPause}
+          className="bg-black/70 text-white px-3 py-1.5 rounded-full text-sm flex items-center gap-1 hover:bg-black/90 transition"
+        >
+          <span>{isPaused ? "▶️" : "⏸️"}</span>
+        </button>
+      </div>
+
       <div className="p-3 flex justify-between items-center text-white text-sm">
-        <div>
-          <div className="font-semibold">{video.videoId}</div>
-          <div className="text-xs text-slate-400">{video.status}</div>
-          {/* 🔥 Show analytics data */}
-          <div className="text-xs text-slate-500 mt-1">
-            Session: {analytics.sessionId.substring(0, 8)}... | 
-            Watches: {analytics.watchCount} | 
-            Pauses: {analytics.pauseCount}
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-xs font-bold">
+            {video.userEmail?.charAt(0).toUpperCase() || "?"}
+          </div>
+          <div>
+            <div className="font-semibold text-sm">{video.userEmail?.split('@')[0] || "Anonymous"}</div>
+            <div className="text-xs text-slate-400">
+              {new Date((video.createdAt || 0) * 1000).toLocaleDateString()}
+            </div>
           </div>
         </div>
 
         <div className="flex gap-3 items-center">
-          <button onClick={toggleLike}>
-            {liked ? "♥" : "♡"} {stats.likeCount || 0}
+          <button onClick={toggleLike} className="hover:scale-110 transition flex items-center gap-1">
+            <span className="text-base">{liked ? "♥" : "♡"}</span>
+            <span className="text-xs">{stats.likeCount || 0}</span>
           </button>
-          <span>💬 {stats.commentCount || 0}</span>
-          <span>👁 {stats.viewCount || 0}</span>
+          <button onClick={() => setShowComments(!showComments)} className="hover:scale-110 transition flex items-center gap-1">
+            <span className="text-base">💬</span>
+            <span className="text-xs">{stats.commentCount || 0}</span>
+          </button>
+          <div className="flex items-center gap-1">
+            <span className="text-base">👁</span>
+            <span className="text-xs">{stats.viewCount || 0}</span>
+          </div>
         </div>
       </div>
+
+      {showComments && (
+        <CommentSection videoId={video.videoId} onCommentAdded={handleCommentAdded} />
+      )}
     </div>
   );
 }

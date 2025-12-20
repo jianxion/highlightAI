@@ -5,3 +5,8 @@ __pycache__/
 .DS_Store
 *.log
 .git
+FOOTBALL_TEST.mp4
+frontend.zip
+test-videos/
+*.mp4
+*.MP4

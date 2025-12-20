@@ -1,0 +1,20 @@
+import { util } from '@aws-appsync/utils';
+
+export function request(ctx) {
+  const { videoId } = ctx.arguments;
+  
+  return {
+    operation: 'Invoke',
+    payload: {
+      action: 'getComments',
+      videoId: videoId
+    }
+  };
+}
+
+export function response(ctx) {
+  if (ctx.error) {
+    util.error(ctx.error.message, ctx.error.type);
+  }
+  return ctx.result || [];
+}

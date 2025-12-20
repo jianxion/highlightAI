@@ -13,12 +13,11 @@ export const LIST_VIDEOS = gql`
       filename
       s3Key
       bucket
-      processedS3Key
-      processedBucket
-      contentType
       fileSize
       status
       createdAt
+      userEmail
+      userId
       likeCount
       commentCount
       viewCount
@@ -30,7 +29,7 @@ export const LIST_VIDEOS = gql`
  * Engagement mutations
  */
 export const LIKE_VIDEO = gql`
-  mutation LikeVideo($videoId: String!) {
+  mutation LikeVideo($videoId: ID!) {
     likeVideo(videoId: $videoId) {
       likeCount
       commentCount
@@ -40,7 +39,7 @@ export const LIKE_VIDEO = gql`
 `;
 
 export const UNLIKE_VIDEO = gql`
-  mutation UnlikeVideo($videoId: String!) {
+  mutation UnlikeVideo($videoId: ID!) {
     unlikeVideo(videoId: $videoId) {
       likeCount
       commentCount
@@ -50,7 +49,7 @@ export const UNLIKE_VIDEO = gql`
 `;
 
 export const RECORD_VIEW = gql`
-  mutation RecordView($videoId: String!) {
+  mutation RecordView($videoId: ID!) {
     recordView(videoId: $videoId) {
       likeCount
       commentCount
@@ -62,8 +61,38 @@ export const RECORD_VIEW = gql`
 /**
  * Realtime engagement updates (per video)
  */
+
+export const ADD_COMMENT = gql`
+  mutation AddComment($videoId: ID!, $content: String!) {
+    addComment(videoId: $videoId, content: $content) {
+      commentId
+      videoId
+      userId
+      userEmail
+      content
+      createdAt
+    }
+  }
+`;
+
+export const GET_COMMENTS = gql`
+  query GetVideoComments($videoId: ID!) {
+    getVideoComments(videoId: $videoId) {
+      commentId
+      videoId
+      userId
+      userEmail
+      content
+      createdAt
+    }
+  }
+`;
+
+/**
+ * Realtime engagement updates (per video)
+ */
 export const ON_ENGAGEMENT_UPDATE = gql`
-  subscription OnEngagementUpdate($videoId: String!) {
+  subscription OnEngagementUpdate($videoId: ID!) {
     onVideoEngagementUpdate(videoId: $videoId) {
       likeCount
       commentCount

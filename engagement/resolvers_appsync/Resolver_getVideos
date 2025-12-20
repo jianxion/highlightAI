@@ -1,0 +1,28 @@
+import { util } from '@aws-appsync/utils';
+
+/**
+ * Get a single video by ID from DynamoDB
+ * @param {import('@aws-appsync/utils').Context} ctx the context
+ * @returns {*} the request
+ */
+export function request(ctx) {
+  const { videoId } = ctx.arguments;
+  
+  return {
+    operation: 'GetItem',
+    key: util.dynamodb.toMapValues({ videoId })
+  };
+}
+
+/**
+ * Returns the resolver result
+ * @param {import('@aws-appsync/utils').Context} ctx the context
+ * @returns {*} the result
+ */
+export function response(ctx) {
+  if (ctx.error) {
+    util.error(ctx.error.message, ctx.error.type);
+  }
+  
+  return ctx.result || null;
+}
